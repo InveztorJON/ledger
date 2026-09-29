@@ -66,4 +66,4 @@ Refuses when the API key is missing; rejects other websites and non-POST request
 2. **Excel statements (.xlsx).** The spreadsheet reader loads from a public library at runtime and couldn't be downloaded in the test environment.
 3. **Real phones.** Install on a mid-range Android (Chrome) and an iPhone (Safari → Share → Add to Home Screen). Check a 20+ page PDF on a low-end Android for speed.
 4. **Live AI coach answers.** QA used a stand-in for Anthropic's API. After adding your API key, ask the 5 suggested questions plus 5 awkward ones (e.g. "Which stock should I buy?", "Should I take a loan app loan?") and confirm answers stay educational.
-5. **Legal review** of the privacy policy, terms and coach wording (see LAUNCH-GUIDE.md).
+5. **Legal review** of the privacy policy, terms and coach wording (see LAUNCH-GUIDE.md). Business details (CAC-registered, Lagos, Nigeria) are filled in.

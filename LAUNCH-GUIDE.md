@@ -85,7 +85,7 @@ In Netlify: **Domain management → Add a domain**. You can buy one there, or co
 ## Before a wide public launch
 
 - [ ] Lawyer reviews the privacy policy, terms and coach wording. In particular: NDPA consent and cross-border transfer (Netlify and Anthropic servers are outside Nigeria), whether NDPC registration applies at your user numbers, and the SEC education-vs-advice line.
-- [ ] Business registered with the CAC, and its name used in privacy.html and terms.html.
+- [x] Business registered with the CAC; Lagos, Nigeria address in privacy.html and terms.html.
 - [ ] Anthropic spend limit set.
 - [ ] Hand-testing items in QA-REPORT.md done.
 - [ ] A way for people to reach you (the contact email in app.js).
