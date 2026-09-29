@@ -7,6 +7,7 @@
 //   COACH_MODEL         optional. Defaults to claude-haiku-4-5-20251001 (fast and low cost)
 //   COACH_HOURLY_LIMIT  optional. Questions per person per hour. Default 20
 //   COACH_DAILY_LIMIT   optional. Questions per server instance per day. Default 2000
+//   ANTHROPIC_BASE_URL  optional. Set automatically by Netlify AI Gateway; otherwise Anthropic's API is used directly
 
 const RULES = `You are the coach inside Ledger, a money-habits app for people in Nigeria. You teach and encourage. You are not a licensed financial adviser.
 Rules:
@@ -78,7 +79,8 @@ export default async (req, context) => {
   if (hits.size > 5000) hits.clear();
 
   try {
-    const r = await fetch('https://api.anthropic.com/v1/messages', {
+    const base = (process.env.ANTHROPIC_BASE_URL || 'https://api.anthropic.com').replace(/\/+$/, '');
+    const r = await fetch(base + '/v1/messages', {
       method: 'POST',
       headers: { 'x-api-key': key, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
       body: JSON.stringify({
