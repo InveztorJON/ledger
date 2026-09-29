@@ -1,5 +1,5 @@
 /* ===== Ledger settings: edit before launch ===== */
-window.LEDGER_CONTACT_EMAIL = 'ndubujohnpaul@gmail.com';   // e.g. 'hello@yourdomain.com' — shown in the app for questions and feedback
+window.LEDGER_CONTACT_EMAIL = 'jonspirelimited@gmail.com';   // e.g. 'hello@yourdomain.com' — shown in the app for questions and feedback
 /* ================================================= */
 'use strict';
 /* ================= utilities ================= */
