@@ -1,0 +1,12 @@
+{
+  "name": "ledger",
+  "private": true,
+  "description": "Ledger money-habits coach by Jonspire Limited",
+  "type": "module",
+  "dependencies": {
+    "@netlify/blobs": "^8.1.0"
+  },
+  "scripts": {
+    "test": "node tests/test_coach.mjs netlify/functions/coach.mjs && node tests/test_subs.mjs"
+  }
+}

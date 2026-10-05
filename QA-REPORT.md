@@ -67,3 +67,14 @@ Refuses when the API key is missing; rejects other websites and non-POST request
 3. **Real phones.** Install on a mid-range Android (Chrome) and an iPhone (Safari → Share → Add to Home Screen). Check a 20+ page PDF on a low-end Android for speed.
 4. **Live AI coach answers.** QA used a stand-in for Anthropic's API. After adding your API key, ask the 5 suggested questions plus 5 awkward ones (e.g. "Which stock should I buy?", "Should I take a loan app loan?") and confirm answers stay educational.
 5. **Legal review** of the privacy policy, terms and coach wording (see LAUNCH-GUIDE.md). Business details (CAC-registered, Lagos, Nigeria) are filled in.
+
+## Ledger Plus — 5 October 2026
+
+| Suite | Result |
+| --- | --- |
+| Subscription and admin server (`tests/test_subs.mjs`) | 42 of 42 |
+| Full flow in a phone-sized browser (`tests/plus_test.py`) | 35 of 35 |
+
+Covered: 5 free uploads then lock (including files dropped or pasted); existing data stays viewable; sign-up needs agreement and a valid Nigerian phone; pay screen shows JONSPIRE LIMITED · UBA · 1029821937 · ₦1,500 and the person's code; receipt upload (image or PDF, checked by file type, max 3.5 MB); admin password, lockout after 10 wrong tries; AI receipt check flags wrong amount, account, date or missing reference and never logs receipt contents; approve needs a "money received" confirmation; one calendar month from approval; approving twice adds nothing; early renewal adds a month on top of remaining days; reminder banner appears 3 days before the end (not 4); cancel keeps access to the end and stops reminders; expiry locks uploads again; restore on another phone with code + phone number; no sideways scrolling at 360px; no JavaScript or security-policy errors.
+
+Still to check by hand: one real transfer and approval on the live site, the AI check on a real bank-app receipt, and a renewal notification on a real Android phone.

@@ -22,8 +22,8 @@ p,li{color:var(--ink);max-width:66ch}.muted{color:var(--ink-2)}a{color:var(--gre
 </head>
 <body><main><a class="back" href="./">← Back to Ledger</a>
 <h1>Privacy policy</h1>
-<p class="muted">Last updated: 29 September 2026</p>
-<div class="box"><p><b>In short:</b> Ledger reads your bank statement on your own phone or computer. The file is never uploaded, and Ledger's servers do not store your transactions. If you use the AI coach, a short summary of your numbers is sent to generate an answer and is not kept by Ledger.</p></div>
+<p class="muted">Last updated: 5 October 2026</p>
+<div class="box"><p><b>In short:</b> Ledger reads your bank statement on your own phone or computer. The file is never uploaded, and Ledger's servers do not store your transactions. If you use the AI coach, a short summary of your numbers is sent to generate an answer and is not kept by Ledger. If you subscribe to Ledger Plus, we keep your name, phone number, optional email and payment receipt so we can verify and manage your subscription.</p></div>
 
 <h2>Who we are</h2>
 <p>Ledger is a product of Jonspire Limited ("we"), a private company limited by shares incorporated in Nigeria under the Companies and Allied Matters Act 2020 and registered with the Corporate Affairs Commission (RC 9187600), with its business address in Lagos, Nigeria. For privacy questions or to use your rights, contact <a href="mailto:jonspirelimited@gmail.com">jonspirelimited@gmail.com</a>.</p>
@@ -33,24 +33,28 @@ p,li{color:var(--ink);max-width:66ch}.muted{color:var(--ink-2)}a{color:var(--gre
 <li><b>Bank statements you choose to upload.</b> Read on your device to find dates, descriptions and amounts. The file itself is discarded after reading. If you use a password to open a PDF, it is used once and never saved.</li>
 <li><b>Transactions, tags, check-ins, quiz answers and progress.</b> Stored in your browser on your device, only if you switch on "Remember my data on this device". Otherwise they are cleared when you close Ledger.</li>
 <li><b>AI coach questions (optional).</b> When you ask the coach a question, Ledger sends your question, the recent conversation and a short summary of your numbers (monthly totals, categories and patterns) to our coach service, which asks Anthropic's Claude model for an answer. It never sends your statement, individual transactions or the names of people you pay. Our coach service does not store or log the content of your questions. Anthropic processes the request to generate the answer under its commercial terms and privacy policy.</li>
+<li><b>Free-trial count.</b> Ledger counts how many statements you have uploaded on this device (5 are free). The count is kept in your browser, contains no financial data, and is not deleted by "Delete everything" so the trial works fairly.</li>
+<li><b>Ledger Plus subscription (optional).</b> If you subscribe, we collect your full name, phone number, email address if you give one, the proof of payment you upload (a screenshot or PDF of your bank transfer, which shows details such as your name, bank, amount, date and transaction reference), your Ledger code, and your subscription dates. These are stored on our servers (Netlify) so we can match your transfer to our bank account, verify it, start and renew your month, remind you before it ends, and keep accounting records. Your phone keeps a private key that links it to your subscription.</li>
+<li><b>Payment checks.</b> To help us check receipts faster, we may send your proof of payment to Anthropic's Claude model to read the amount, account, date and reference. A person at Jonspire Limited always makes the final decision by checking our bank account; nothing is decided automatically.</li>
 </ul>
 
 <h2>Why we process it (legal basis)</h2>
-<p>We rely on your consent, which you give in the app before your first statement is read and separately before using the AI coach. You can withdraw consent at any time in Ledger under Me → Privacy & data.</p>
+<p>We rely on your consent, which you give in the app before your first statement is read and separately before using the AI coach. You can withdraw consent at any time in Ledger under Me → Privacy & data. For Ledger Plus, we process your subscription details to perform our contract with you (taking and verifying your payment and giving you access) and to meet our legal obligations to keep accounting and tax records.</p>
 
 <h2>Services we use</h2>
 <ul>
-<li><b>Netlify</b> hosts the app and runs the coach service. Like most hosts, it records technical request information such as IP address and browser type.</li>
-<li><b>Anthropic</b> provides the AI model for the optional coach.</li>
+<li><b>Netlify</b> hosts the app, runs the coach and subscription services, and stores subscription records and payment receipts. Like most hosts, it records technical request information such as IP address and browser type.</li>
+<li><b>Anthropic</b> provides the AI model for the optional coach and for reading payment receipts.</li>
+<li><b>WhatsApp</b> (optional): we may message the phone number you give us about your payment or renewal.</li>
 <li><b>Google Fonts and Cloudflare (cdnjs)</b> deliver fonts and a spreadsheet-reading library. They receive standard request information but never your financial data.</li>
 </ul>
 <p>Some of these providers process data outside Nigeria. Before any data leaves your device for these providers, Ledger tells you and asks for your consent (for the AI coach, through its own switch). These providers use contractual and technical safeguards, including encryption in transit, and you can use Ledger fully without the AI coach.</p>
 
 <h2>Your rights</h2>
-<p>Under the Nigeria Data Protection Act 2023 you can access, correct, delete and move your data, object to processing, and withdraw consent. Because your data stays on your device, you can do most of this yourself in Ledger: download everything (Me → Download my data), remove a statement, or delete everything. You can also complain to the Nigeria Data Protection Commission.</p>
+<p>Under the Nigeria Data Protection Act 2023 you can access, correct, delete and move your data, object to processing, and withdraw consent. For Ledger Plus records we hold, email us and we will respond within the time the law requires. Because your financial data stays on your device, you can do most of the rest yourself in Ledger: download everything (Me → Download my data), remove a statement, or delete everything. You can also complain to the Nigeria Data Protection Commission.</p>
 
 <h2>How long we keep data</h2>
-<p>Ledger's servers keep no statement data or coach conversations. Data on your device stays until you remove it, switch off "Remember my data", or clear your browser storage.</p>
+<p>Ledger's servers keep no statement data or coach conversations. Data on your device stays until you remove it, switch off "Remember my data", or clear your browser storage. Ledger Plus records and payment receipts are kept while your subscription is active and afterwards for as long as Nigerian company and tax law requires us to keep accounting records (generally six years), then deleted.</p>
 
 <h2>Children</h2>
 <p>Ledger is intended for people aged 18 and over.</p>

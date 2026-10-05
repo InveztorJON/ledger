@@ -205,7 +205,7 @@ a{color:var(--green);text-underline-offset:2px}
 .stmt{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;padding:10px 0;border-top:1px solid var(--line);align-items:center}
 .stmt .nm{font-weight:600;font-size:.92rem;overflow-wrap:anywhere}
 
-input[type=text],input[type=number],input[type=password],input[type=search],textarea,select{font:inherit;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:12px;min-height:44px;padding:9px 12px;width:100%;max-width:100%}
+input[type=text],input[type=number],input[type=password],input[type=search],input[type=tel],input[type=email],textarea,select{font:inherit;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:12px;min-height:44px;padding:9px 12px;width:100%;max-width:100%}
 textarea{min-height:110px;resize:vertical;font-size:.9rem}
 select{min-height:38px;padding:4px 8px;font-size:.84rem;border-radius:10px}
 label.f{display:grid;gap:5px;font-size:.86rem;font-weight:600;color:var(--ink-2)}
@@ -308,8 +308,25 @@ details summary{cursor:pointer;font-weight:700;min-height:40px;display:flex;alig
 @media (prefers-reduced-motion: reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
 @media (pointer: coarse){.btn.sm,.pill,select,.btn.link,.suggest button{min-height:44px}.checks label{min-height:44px}}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
-</style>
 
+/* Ledger Plus */
+.paybox{border:1px solid var(--line);border-radius:14px;background:var(--surface-2);padding:6px 14px}
+.paybox .kv{display:grid;grid-template-columns:1fr auto;align-items:center;gap:2px 10px;padding:9px 0;border-top:1px solid var(--line)}
+.paybox .kv:first-child{border-top:0}
+.paybox .kv span{grid-column:1/-1;color:var(--ink-2);font-size:.8rem}
+.paybox .kv b{font-weight:700}
+.paybox .big-n{font-size:1.15rem;letter-spacing:.04em}
+.planline{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:.88rem;color:var(--ink-2);background:var(--surface-2);border-radius:12px;padding:8px 12px}
+.planline svg{width:18px;height:18px;flex:none}
+.planline.good{background:var(--green-soft);color:var(--ink)}
+.planline.good svg{color:var(--green)}
+.planline.warn{background:var(--gold-soft);color:var(--ink)}
+.planline .btn.link{min-height:32px;padding:0 2px}
+.checkrow{display:flex;gap:10px;align-items:flex-start;font-size:.86rem;color:var(--ink-2)}
+.checkrow input{width:20px;height:20px;margin-top:2px;flex:none;accent-color:var(--green)}
+#planSheet .x{justify-self:end;align-self:flex-end;width:auto;margin:-6px -6px 0 0}
+#planSheet h2{margin-top:-8px}
+</style>
 <div class="app" id="app">
   <aside class="side" id="side" aria-label="Statements"></aside>
   <div class="main">
@@ -323,8 +340,12 @@ details summary{cursor:pointer;font-weight:700;min-height:40px;display:flex;alig
 <div class="toasts" id="toasts" role="status" aria-live="polite"></div>
 <canvas id="fx" aria-hidden="true"></canvas>
 <input type="file" id="fileIn" accept=".pdf,.csv,.txt,.xlsx,.xls" hidden>
-
 <script>
+/* ===== Ledger settings: edit before launch ===== */
+window.LEDGER_CONTACT_EMAIL = 'jonspirelimited@gmail.com';   // shown in the app for questions and feedback
+// Ledger Plus: free trial and subscription. Keep in sync with netlify/lib/plan.mjs (tests check this).
+window.LEDGER_PLAN = {freeUploads: 5, priceNaira: 1500, bank: 'UBA', accountName: 'JONSPIRE LIMITED', accountNumber: '1029821937', remindDays: 3, appUrl: 'https://jonspire-ledger.netlify.app'};
+/* ================================================= */
 'use strict';
 /* ================= utilities ================= */
 const $=(s,r=document)=>r.querySelector(s);
@@ -384,6 +405,187 @@ const CONTACT_EMAIL=String(window.LEDGER_CONTACT_EMAIL||'');
 let installEvt=null;
 let chat=[], chatBusy=false, liveText='', chatCtl=null, chatDraft='', sampleFn=null, sampleState='pending';
 let ciDraft={};
+
+/* ================= Ledger Plus: free trial and subscription ================= */
+const PLAN=Object.assign({freeUploads:5,priceNaira:1500,bank:'UBA',accountName:'JONSPIRE LIMITED',accountNumber:'1029821937',remindDays:3,appUrl:''},window.LEDGER_PLAN||{});
+const PKEY='ledger_plan';
+function loadPlan(){try{const p=JSON.parse(localStorage.getItem(PKEY)||'null');if(p&&typeof p==='object')return p;}catch(e){}return{};}
+let P=loadPlan();
+function savePlan(){try{localStorage.setItem(PKEY,JSON.stringify(P));}catch(e){}}
+if(typeof P.used!=='number'){P.used=S.demo?0:Math.min(S.statements.length,PLAN.freeUploads);savePlan();}
+const planActive=()=>!!(P.sub&&P.sub.end&&Date.parse(P.sub.end)>Date.now());
+const freeLeft=()=>Math.max(0,PLAN.freeUploads-(P.used||0));
+const canUpload=()=>planActive()||freeLeft()>0;
+const planDaysLeft=()=>P.sub&&P.sub.end?Math.max(0,Math.ceil((Date.parse(P.sub.end)-Date.now())/864e5)):0;
+const planExpired=()=>!!(P.sub&&P.sub.end&&!planActive());
+const renewDue=()=>planActive()&&planDaysLeft()<=PLAN.remindDays&&!P.sub.cancelAtEnd&&!P.sub.pending;
+const fmtLong=iso=>{try{return new Date(iso).toLocaleDateString('en-NG',{day:'numeric',month:'long',year:'numeric',timeZone:'Africa/Lagos'});}catch(e){return String(iso).slice(0,10);}};
+const priceTxt=()=>naira(PLAN.priceNaira);
+let planView=null, planBusy=false, planErr='', planDraft={name:'',phone:'',email:''}, cancelAsk=false;
+
+async function subApi(action,body){
+  const r=await fetch('/api/sub/'+action,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});
+  let d={};try{d=await r.json();}catch(e){}
+  if(!r.ok){const e=new Error(d.error||'Something went wrong. Try again.');e.status=r.status;throw e;}
+  return d;
+}
+function takeSub(d){
+  const prev=P.sub;
+  P.sub={id:d.id,name:d.name,status:d.status,end:d.end,cancelAtEnd:!!d.cancelAtEnd,pending:!!d.pending,rejectedReason:d.rejectedReason||'',checkedAt:Date.now()};
+  if(d.id)P.id=d.id;if(d.token)P.token=d.token;savePlan();
+  if(prev&&prev.status!=='active'&&d.status==='active'){planView=null;setTimeout(()=>{closeSheet();celebrate('Ledger Plus is active',`Your payment was verified. Upload as many statements as you like until ${fmtLong(d.end)}.`,'check');},0);}
+  else if(prev&&prev.end&&d.end&&d.end>prev.end&&prev.status==='active')toast('Renewal verified. Ledger Plus now runs until '+fmtLong(d.end));
+}
+async function refreshPlan(){
+  if(IN_VIEWER||!P.id||!P.token)return;
+  try{takeSub(await subApi('status',{id:P.id,token:P.token}));}catch(e){}
+  if($('#planSheet'))openPlan();else render();
+  maybeNotify();
+}
+function gateUpload(then){
+  if(canUpload())return then();
+  openPlan('limit');
+  if(P.id&&!IN_VIEWER)refreshPlan().then(()=>{if(canUpload()&&$('#planSheet')){closeSheet();toast('Ledger Plus is active. Choose your statement again.');}});
+}
+function countUpload(){
+  if(planActive())return;
+  P.used=(P.used||0)+1;savePlan();
+  const left=freeLeft();
+  if(left===1)toast('1 free statement upload left');
+  else if(left===0)toast(`That was your last free upload. Ledger Plus is ${priceTxt()} a month.`);
+}
+
+/* ---------- plan sheet ---------- */
+const copyBtn=(txt,label)=>`<button class="btn q sm" type="button" data-act="copy" data-arg="${esc(txt)}" aria-label="Copy ${esc(label)}">Copy</button>`;
+function payBox(){
+  const ref=P.id||'';
+  return`<div class="paybox" aria-label="Bank transfer details">
+   <div class="kv"><span>Bank</span><b>${esc(PLAN.bank)} (United Bank for Africa)</b></div>
+   <div class="kv"><span>Account name</span><b>${esc(PLAN.accountName)}</b></div>
+   <div class="kv"><span>Account number</span><b class="num big-n">${esc(PLAN.accountNumber)}</b>${copyBtn(PLAN.accountNumber,'account number')}</div>
+   <div class="kv"><span>Amount</span><b class="num">${priceTxt()}</b></div>
+   ${ref?`<div class="kv"><span>Narration / remark</span><b class="num">${esc(ref)}</b>${copyBtn(ref,'your reference')}</div>`:''}
+  </div>`;
+}
+function planHTML(reason){
+  const head=`<button class="btn q sm x" data-act="close" aria-label="Close">${ic('x')}</button>`;
+  const err=planErr?`<div class="status err" role="alert">${esc(planErr)}</div>`:'';
+  const busy=planBusy?`<div class="status busy" role="status"><span class="spin" aria-hidden="true"></span>${esc(planBusy)}</div>`:'';
+  const intro=reason==='limit'&&!planActive()?`<div class="status ok"><b>You've used your ${PLAN.freeUploads} free statement uploads.</b> Everything you've uploaded stays here. To upload more, subscribe to Ledger Plus.</div>`:'';
+  const what=`<ul class="evidence"><li>Upload as many statements as you like for one month</li><li>${priceTxt()} a month by bank transfer. No card needed, no automatic charges</li><li>We remind you ${PLAN.remindDays} days before your month ends, so you can renew or cancel</li></ul>`;
+  if(IN_VIEWER)return`<div id="planSheet" class="stack">${head}<h2>Ledger Plus · ${priceTxt()} a month</h2>${intro}${what}${payBox()}<p class="small">To subscribe and upload your proof of payment, open the Ledger app${PLAN.appUrl?`: <a href="${esc(PLAN.appUrl)}" target="_blank" rel="noopener">${esc(PLAN.appUrl.replace(/^https?:\/\//,''))}</a>`:''}.</p></div>`;
+  const s=P.sub||{};
+  let v=planView;
+  if(!v){v=!P.id?'details':s.pending?'pending':planActive()?'active':'pay';}
+  if(v==='details')return`<div id="planSheet" class="stack">${head}<h2>Ledger Plus · ${priceTxt()} a month</h2>${intro}${what}
+   <form class="stack" data-form="plan-start" style="gap:12px">
+    <p class="small muted">Step 1 of 3. Tell us who's paying so we can match your transfer.</p>
+    <label class="f" for="plName">Full name, as on your bank account<input type="text" id="plName" autocomplete="name" maxlength="80" required value="${esc(planDraft.name)}"></label>
+    <label class="f" for="plPhone">Phone number (WhatsApp if you have it)<input type="tel" id="plPhone" autocomplete="tel" inputmode="tel" placeholder="0803 123 4567" required value="${esc(planDraft.phone)}"></label>
+    <label class="f" for="plEmail">Email (optional)<input type="email" id="plEmail" autocomplete="email" maxlength="120" value="${esc(planDraft.email)}"></label>
+    <label class="checkrow" for="plAgree"><input type="checkbox" id="plAgree"><span>I agree to the <a href="terms.html" target="_blank" rel="noopener">terms</a> and <a href="privacy.html" target="_blank" rel="noopener">privacy policy</a>, including Ledger keeping my name, phone number and payment receipt to verify my subscription.</span></label>
+    ${err}${busy}
+    <button class="btn" type="submit" ${planBusy?'disabled':''}>Continue</button>
+   </form>
+   <button class="btn link" data-act="plan-restore-open">Already subscribed on another phone? Restore</button></div>`;
+  if(v==='restore')return`<div id="planSheet" class="stack">${head}<h2>Restore Ledger Plus</h2><p class="muted small">Use the code you got when you subscribed (it starts with LDG) and the same phone number.</p>
+   <form class="stack" data-form="plan-restore" style="gap:12px">
+    <label class="f" for="rsId">Your Ledger code<input type="text" id="rsId" autocomplete="off" placeholder="LDG-7K3Q9P" maxlength="12" required></label>
+    <label class="f" for="rsPhone">Phone number<input type="tel" id="rsPhone" autocomplete="tel" inputmode="tel" required></label>
+    ${err}${busy}<button class="btn" type="submit" ${planBusy?'disabled':''}>Restore</button></form>
+   <button class="btn link" data-act="plan-view" data-arg="">Back</button></div>`;
+  if(v==='pay'){
+    const renewing=planActive();
+    const rej=s.status==='rejected'&&!renewing?`<div class="status err" role="alert"><b>We couldn't verify your last receipt.</b> ${esc(s.rejectedReason||'')} Check the details below and upload again, or contact ${esc(CONTACT_EMAIL)}.</div>`:'';
+    return`<div id="planSheet" class="stack">${head}<h2>${renewing?'Renew Ledger Plus':planExpired()?'Renew Ledger Plus':'Pay for Ledger Plus'}</h2>${intro}${rej}
+     ${renewing?`<p class="small muted">Your new month starts when the current one ends on ${fmtLong(s.end)}, so you don't lose any days.</p>`:''}
+     <p class="small"><b>Step 2.</b> Transfer exactly ${priceTxt()} from your bank app or USSD to:</p>${payBox()}
+     <p class="tiny">Put your code <b>${esc(P.id)}</b> in the narration so we can match your payment quickly.</p>
+     <p class="small"><b>Step 3.</b> Upload a screenshot or PDF of the successful transfer.</p>
+     <input type="file" id="proofIn" accept="image/*,application/pdf" hidden data-change="proof-file">
+     ${err}${busy}
+     <button class="btn" data-act="plan-proof" ${planBusy?'disabled':''}>${ic('upload')}Upload proof of payment</button>
+     <p class="tiny">We check every receipt against our UBA account, usually within 24 hours. Your month starts when your payment is verified.</p></div>`;
+  }
+  if(v==='pending'){
+    const last=s.pending;
+    return`<div id="planSheet" class="stack">${head}<h2>We're verifying your payment</h2>
+     <div class="status busy" role="status">${ic('check')} Receipt received. We check every payment against our UBA account, usually within 24 hours.</div>
+     <p class="small muted">Ledger unlocks by itself once your payment is approved, and your month starts from that moment. ${planActive()?`You still have Ledger Plus until ${fmtLong(s.end)}.`:''}</p>
+     <p class="small">Your code: <b class="num">${esc(P.id)}</b> ${copyBtn(P.id,'your code')}</p>
+     ${err}${busy}
+     <div class="row"><button class="btn" data-act="plan-refresh" ${planBusy?'disabled':''}>Check now</button><button class="btn q" data-act="plan-view" data-arg="pay">Upload a different receipt</button></div>
+     ${last&&CONTACT_EMAIL?`<p class="tiny">Not approved after 24 hours? Email ${esc(CONTACT_EMAIL)} with your code.</p>`:''}</div>`;
+  }
+  // active
+  const dl=planDaysLeft();
+  return`<div id="planSheet" class="stack">${head}<h2>Ledger Plus is active</h2>
+   <div class="status ok">Unlimited statement uploads until <b>${fmtLong(s.end)}</b> · ${dl} day${dl===1?'':'s'} left.</div>
+   ${s.cancelAtEnd?`<p class="small">You chose not to renew. You keep Ledger Plus until ${fmtLong(s.end)}, then uploads lock again. Your data stays.</p><div class="row"><button class="btn" data-act="plan-resume">Keep my subscription</button></div>`
+   :`<p class="small muted">We'll remind you ${PLAN.remindDays} days before it ends. Renewing early is fine: the new month starts when this one ends.</p>
+     <div class="row"><button class="btn" data-act="plan-view" data-arg="pay">Renew for ${priceTxt()}</button><button class="btn q" data-act="plan-cancel-ask">Cancel renewal</button></div>
+     ${cancelAsk?`<div class="status err"><p class="small"><b>Cancel renewal?</b> Nothing is charged automatically. You keep Ledger Plus until ${fmtLong(s.end)} and we stop reminding you.</p><div class="row" style="margin-top:10px"><button class="btn danger sm" data-act="plan-cancel">Cancel renewal</button><button class="btn q sm" data-act="plan-cancel-no">Keep it</button></div></div>`:''}`}
+   ${notifyOffer()}
+   ${err}${busy}
+   <p class="tiny">Your code: <b class="num">${esc(P.id)}</b>. Use it with your phone number to restore Ledger Plus on another phone.</p></div>`;
+}
+function openPlan(reason){if(reason!==undefined){planErr='';cancelAsk=false;planView=null;}const keep=$('#planSheet')?$('#planSheet').dataset.reason:'';reason=reason||keep||'';openSheet(planHTML(reason));const el=$('#planSheet');if(el)el.dataset.reason=reason;}
+const notifyOk=()=>!IN_VIEWER&&'Notification' in window&&'serviceWorker' in navigator;
+function notifyOffer(){if(!notifyOk()||Notification.permission!=='default')return'';return`<p class="small"><button class="btn q sm" data-act="plan-notify">Remind me on this phone</button> <span class="tiny">A notification ${PLAN.remindDays} days before your month ends.</span></p>`;}
+async function maybeNotify(){
+  if(!notifyOk()||Notification.permission!=='granted'||!renewDue())return;
+  const t=todayISO();if(P.notified===t)return;P.notified=t;savePlan();
+  const dl=planDaysLeft();
+  try{const reg=await navigator.serviceWorker.ready;reg.showNotification(`Ledger Plus ends in ${dl} day${dl===1?'':'s'}`,{body:`Renew for ${priceTxt()} or cancel before ${fmtLong(P.sub.end)}.`,icon:'icons/icon-192.png',badge:'icons/favicon-32.png',tag:'ledger-renew'});}catch(e){}
+}
+async function fileToProof(f){
+  if(f.type==='application/pdf'||/\.pdf$/i.test(f.name)){
+    if(f.size>3.5*1024*1024)throw new Error('That PDF is over 3.5 MB. Take a screenshot of the receipt instead.');
+    return{type:'application/pdf',data:await b64(f)};
+  }
+  if(!/^image\//.test(f.type))throw new Error('Upload a screenshot, photo or PDF of your receipt.');
+  try{
+    const bmp=await createImageBitmap(f);const k=Math.min(1,1600/Math.max(bmp.width,bmp.height));
+    const c=document.createElement('canvas');c.width=Math.round(bmp.width*k);c.height=Math.round(bmp.height*k);
+    const x=c.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,c.width,c.height);x.drawImage(bmp,0,0,c.width,c.height);
+    const blob=await new Promise(res=>c.toBlob(res,'image/jpeg',0.86));
+    if(blob)return{type:'image/jpeg',data:await b64(blob)};
+  }catch(e){}
+  if(!['image/jpeg','image/png','image/webp'].includes(f.type))throw new Error("That image type can't be read here. Take a screenshot (PNG or JPG) instead.");
+  if(f.size>3.5*1024*1024)throw new Error('That image is over 3.5 MB. Take a screenshot instead.');
+  return{type:f.type,data:await b64(f)};
+}
+function b64(blob){return new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(String(r.result).split(',')[1]||'');r.onerror=()=>rej(new Error('read'));r.readAsDataURL(blob);});}
+async function planRun(label,fn){planBusy=label;planErr='';openPlan();try{await fn();}catch(e){planErr=e.message||'Something went wrong. Try again.';if(e.status===401){planErr='This phone is no longer linked to your subscription. Use Restore with your code and phone number.';}}finally{planBusy=false;if($('#planSheet'))openPlan();render();}}
+
+/* ---------- plan on the page ---------- */
+function planLine(){
+  if(planActive())return`<div class="planline good">${ic('check')}<span><b>Ledger Plus</b> · unlimited uploads until ${fmtLong(P.sub.end)}</span></div>`;
+  if(P.sub&&P.sub.pending)return`<div class="planline">${ic('check')}<span>Payment received, being verified. <button class="btn link" data-act="plan">Details</button></span></div>`;
+  const left=freeLeft();
+  if(left>0)return`<div class="planline">${ic('star')}<span>Free trial: <b>${left} of ${PLAN.freeUploads}</b> statement upload${left===1?'':'s'} left</span></div>`;
+  return`<div class="planline warn">${ic('lock')}<span>Free uploads used. <button class="btn link" data-act="plan">Get Ledger Plus · ${priceTxt()}/month</button></span></div>`;
+}
+function planBanner(){
+  if(IN_VIEWER||!P.sub)return'';
+  const s=P.sub;
+  if(renewDue()){const dl=planDaysLeft();return`<div class="banner" role="status"><p><b>Ledger Plus ends in ${dl} day${dl===1?'':'s'}, on ${fmtLong(s.end)}.</b> Renew for ${priceTxt()} to keep uploading statements, or cancel if you don't need it.</p><div class="row"><button class="btn sm" data-act="plan-renew">Renew</button><button class="btn q sm" data-act="plan-cancel-open">Cancel</button></div></div>`;}
+  if(planExpired()&&!s.pending)return`<div class="banner"><p><b>Ledger Plus ended on ${fmtLong(s.end)}.</b> Your data is still here. Renew for ${priceTxt()} to upload new statements.</p><div class="row"><button class="btn sm" data-act="plan-renew">Renew</button></div></div>`;
+  if(s.status==='rejected'&&!planActive())return`<div class="banner"><p><b>We couldn't verify your payment.</b> ${esc(s.rejectedReason||'')}</p><div class="row"><button class="btn sm" data-act="plan-renew">See details</button></div></div>`;
+  return'';
+}
+function planCard(){
+  const s=P.sub||{};
+  let body;
+  if(planActive())body=`<div class="head"><div><h2>Ledger Plus</h2><p class="muted small">Active until ${fmtLong(s.end)} · ${planDaysLeft()} days left${s.cancelAtEnd?' · won\'t renew':''}</p></div><span class="chip good">${ic('check')}Active</span></div>`;
+  else if(s.pending)body=`<div class="head"><div><h2>Ledger Plus</h2><p class="muted small">Payment received, being verified (usually within 24 hours)</p></div><span class="chip warn">Verifying</span></div>`;
+  else{const used=Math.min(P.used||0,PLAN.freeUploads);body=`<div class="head"><div><h2>${planExpired()?'Ledger Plus ended':'Free trial'}</h2><p class="muted small">${planExpired()?`Ended ${fmtLong(s.end)}. `:''}${used} of ${PLAN.freeUploads} free statement uploads used</p></div><span class="chip ${freeLeft()?'info':'bad'}">${freeLeft()} left</span></div><div class="xp" role="progressbar" aria-label="Free uploads used" aria-valuemin="0" aria-valuemax="${PLAN.freeUploads}" aria-valuenow="${used}"><i style="width:${used/PLAN.freeUploads*100}%"></i></div>`;}
+  return`<section class="card" id="plan">${body}
+   <p class="small muted" style="margin-top:10px">Ledger Plus: unlimited statement uploads for ${priceTxt()} a month, paid by bank transfer to ${esc(PLAN.accountName)} (${esc(PLAN.bank)}).</p>
+   <div class="row" style="margin-top:12px"><button class="btn sm" data-act="plan">${planActive()?'Manage':s.pending?'See status':planExpired()?'Renew':'Get Ledger Plus'}</button>${!IN_VIEWER&&!P.id?'<button class="btn q sm" data-act="plan-restore-open">Restore on this phone</button>':''}</div>
+   ${P.id?`<p class="tiny" style="margin-top:10px">Your code: <b class="num">${esc(P.id)}</b></p>`:''}</section>`;
+}
+
 
 /* ================= categories ================= */
 const CATS=[
@@ -902,6 +1104,7 @@ function statementsPanel(){
    <div><h2>Statements</h2><p class="muted small" style="margin-top:4px">Upload the statement you already get from your bank. No bank login and no account linking.</p></div>
    <div class="drop" data-act="pick" role="button" tabindex="0" aria-label="Upload a bank statement">${ic('upload')}<strong>Drop a statement here</strong><span class="muted small">or tap to choose a file</span><span class="tiny">PDF, Excel or CSV from any Nigerian bank</span></div>
    ${statusHTML()}
+   ${planLine()}
    <div class="lockline">${ic('lock')}<span>Read on this device. The file is never uploaded or stored, only the transactions it contains.</span></div>
    <div class="row"><button class="btn q sm" data-act="paste">${pasteOpen?'Hide paste box':'Paste text instead'}</button><button class="btn q sm" data-act="manual">Enter numbers by hand</button></div>
    ${pasteOpen?`<div class="stack" style="gap:8px"><label class="f" for="pasteBox">Paste rows from your statement<textarea id="pasteBox" data-input="paste" placeholder="01/09/2026  POS PURCHASE SHOPRITE  18,500.00  142,300.00">${esc(pasteDraft)}</textarea></label><button class="btn sm" data-act="paste-go">Read pasted rows</button></div>`:''}
@@ -913,7 +1116,7 @@ function statementsPanel(){
 
 /* ---------- home ---------- */
 function viewHome(){
-  const A=getA();let h='';
+  const A=getA();let h=planBanner();
   if(S.demo)h+=`<div class="banner"><p><b>You're looking at a sample.</b> Tolu is a fictional Lagos professional. Upload your own statement to see your real money story.</p><div class="row"><button class="btn sm" data-act="pick">${ic('upload')}Upload my statement</button></div></div>`;
   h+=checkinCard();
   if(!A)return h+emptyHero();
@@ -1139,6 +1342,7 @@ function viewMe(){
   const moods=Object.values(S.checkins);const tense=moods.filter(c=>c.mood==='tense'),tenseLot=tense.filter(c=>c.spend==='lot').length;
   const c=S.consent;
   return`<div class="stack">
+  ${planCard()}
   <div class="grid2">
    <section class="card"><div class="head"><div><h2>Level ${lv.n}: ${lv.name}</h2><p class="muted small">${S.xp} XP${nx?` · ${nx.xp-S.xp} XP to ${nx.name}`:' · top level reached'}</p></div><span class="chip warn">${ic('star')}${S.xp} XP</span></div>
     <div class="xp" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${nx?Math.round((S.xp-lv.xp)/(nx.xp-lv.xp)*100):100}"><i style="width:${nx?(S.xp-lv.xp)/(nx.xp-lv.xp)*100:100}%"></i></div>
@@ -1239,6 +1443,7 @@ async function ingestFile(f,password){
 }
 function finishIngest(rows,kind,name){
   if(!isWide()&&tab!=='statements'){tab='statements';render();}
+  if(!canUpload()){setU({});openPlan('limit');return;}
   const {txns}=parseStatement(rows,kind);
   if(txns.length<3){setU({error:kind==='pdf'&&rows.length<8?'This PDF has no readable text. It may be a scanned image. Download the digital statement from your bank app, or use the Excel or CSV export.':'Ledger found fewer than 3 transactions. Check that this is a bank statement with dates and amounts.'});return;}
   const first=S.demo||!S.statements.length;
@@ -1251,6 +1456,7 @@ function finishIngest(rows,kind,name){
   const ds=added.map(t=>t.date).sort();
   S.txns.push(...added);
   S.statements.push({id:sid,name,kind,count:added.length,from:ds[0],to:ds[ds.length-1],added:todayISO()});
+  countUpload();
   setU({ok:`Added ${added.length} transactions, ${fmtD(ds[0])} to ${fmtDY(ds[ds.length-1])}.${dups?` Skipped ${dups} already here.`:''}`});
   pasteOpen=false;pasteDraft='';
   addXP(first?100:40,first?'First statement':'Statement added');award('books');
@@ -1326,7 +1532,7 @@ function openLesson(id,answered){
    ${answered!=null?`<p class="small ${answered===q.a?'':'muted'}"><b>${answered===q.a?'Correct.':'Not quite.'}</b> ${esc(q.why)}</p>${answered===q.a?'<button class="btn" data-act="close">Done</button>':`<button class="btn q" data-act="lesson" data-arg="${id}">Try again</button>`}`:''}</div>`);
 }
 async function doExport(){
-  const data={exportedAt:new Date().toISOString(),note:'Everything Ledger holds about you on this device.',consent:S.consent,quiz:S.quiz,statements:S.statements,transactions:S.demo?[]:S.txns.map(({id,src,mk,...t})=>t),xp:S.xp,badges:S.badges,checkins:S.checkins,challenges:S.challenges,lessons:S.lessons};
+  const data={exportedAt:new Date().toISOString(),note:'Everything Ledger holds about you on this device.',consent:S.consent,quiz:S.quiz,statements:S.statements,transactions:S.demo?[]:S.txns.map(({id,src,mk,...t})=>t),xp:S.xp,badges:S.badges,checkins:S.checkins,challenges:S.challenges,lessons:S.lessons,plan:{code:P.id||null,freeUploadsUsed:P.used||0,subscription:P.sub||null}};
   const json=JSON.stringify(data,null,2);
   if(!IN_VIEWER){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([json],{type:'application/json'}));a.download='ledger-my-data.json';document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},1000);toast('Saved ledger-my-data.json');return;}
   try{const dl=await window.claude.use('downloads');if(!dl){toast('Downloads are not available in this view.');return;}await dl.save({filename:'ledger-my-data.json',data:json});toast('Saved ledger-my-data.json');}
@@ -1336,10 +1542,10 @@ async function doExport(){
 const ACT={
   tab:a=>{tab=a;S.tab=a==='statements'?'home':a;save();render();window.scrollTo({top:0});},
   privacy:()=>{tab='me';render();const p=$('#privacy');if(p)p.scrollIntoView({behavior:reduceMotion()?'auto':'smooth'});},
-  pick:()=>{if(U.busy)return;if(!S.consent.read)openConsent(()=>$('#fileIn').click());else $('#fileIn').click();},
+  pick:()=>{if(U.busy)return;gateUpload(()=>{if(!S.consent.read)openConsent(()=>$('#fileIn').click());else $('#fileIn').click();});},
   'consent-go':()=>{S.consent.read=true;S.consent.store=!!$('#cs-store')?.checked;S.consent.at=new Date().toISOString();save();const t=consentThen;consentThen=null;closeSheet();if(t)t();},
   paste:()=>{pasteOpen=!pasteOpen;render();if(pasteOpen)$('#pasteBox')?.focus();},
-  'paste-go':()=>{const run=()=>{if(!pasteDraft.trim()){setU({error:'Paste some statement rows first.'});return;}finishIngest(textToRows(pasteDraft),'text','Pasted text');};if(!S.consent.read)openConsent(run);else run();},
+  'paste-go':()=>{const run=()=>{if(!pasteDraft.trim()){setU({error:'Paste some statement rows first.'});return;}finishIngest(textToRows(pasteDraft),'text','Pasted text');};gateUpload(()=>{if(!S.consent.read)openConsent(run);else run();});},
   manual:()=>{if(!S.consent.read)openConsent(openManual);else openManual();},
   'pw-cancel':()=>{pendingFile=null;setU({});},
   'clear-demo':()=>{S.demo=false;save();dataVer++;render();},
@@ -1365,7 +1571,7 @@ const ACT={
   ask:q=>ask(q),
   stop:()=>{if(chatCtl)chatCtl.abort();},
   export:()=>doExport(),
-  'wipe-ask':()=>{$('#wipeBox').innerHTML=`<div class="status err" style="margin-top:12px"><p class="small"><b>Delete everything on this device?</b> Statements, transactions, XP, badges and check-ins will be removed. This can't be undone.</p><div class="row" style="margin-top:10px"><button class="btn danger sm" data-act="wipe">Delete everything</button><button class="btn q sm" data-act="wipe-no">Keep my data</button></div></div>`;},
+  'wipe-ask':()=>{$('#wipeBox').innerHTML=`<div class="status err" style="margin-top:12px"><p class="small"><b>Delete everything on this device?</b> Statements, transactions, XP, badges and check-ins will be removed. This can't be undone. Your Ledger Plus subscription and free-upload count are kept.</p><div class="row" style="margin-top:10px"><button class="btn danger sm" data-act="wipe">Delete everything</button><button class="btn q sm" data-act="wipe-no">Keep my data</button></div></div>`;},
   'wipe-no':()=>{$('#wipeBox').innerHTML='';},
   wipe:()=>{try{localStorage.removeItem(KEY);}catch(e){}S=freshState();chat=[];U={};tab='home';dataVer++;save();render();toast('Everything was deleted from this device');}
 };
@@ -1376,6 +1582,23 @@ const CHANGE={
   'tg-store':(a,el)=>{if(!el.checked&&!S.demo&&S.txns.length){el.checked=true;$('#wipeBox').innerHTML=`<div class="status err" style="margin-top:12px"><p class="small"><b>Stop remembering your data?</b> Your transactions stay until you close this page, then they're gone from this device.</p><div class="row" style="margin-top:10px"><button class="btn danger sm" data-act="forget">Stop remembering</button><button class="btn q sm" data-act="wipe-no">Cancel</button></div></div>`;return;}S.consent.store=el.checked;save();},
   'tg-ai':(a,el)=>{S.consent.ai=el.checked;if(!el.checked){chat=[];}save();}
 };
+Object.assign(ACT,{
+  plan:()=>openPlan(''),
+  'plan-renew':()=>{openPlan('');planView='pay';openPlan();},
+  'plan-cancel-open':()=>{openPlan('');planView='active';cancelAsk=true;openPlan();},
+  'plan-view':v=>{planErr='';planView=v||null;openPlan();},
+  'plan-restore-open':()=>{openPlan('');planView='restore';openPlan();},
+  'plan-proof':()=>{const i=$('#proofIn');if(i)i.click();},
+  'plan-refresh':()=>planRun('Checking…',async()=>{takeSub(await subApi('status',{id:P.id,token:P.token}));if(planActive()&&!P.sub.pending)planView=null;}),
+  'plan-cancel-ask':()=>{cancelAsk=true;openPlan();},
+  'plan-cancel-no':()=>{cancelAsk=false;openPlan();},
+  'plan-cancel':()=>planRun('Saving…',async()=>{takeSub(await subApi('cancel',{id:P.id,token:P.token}));cancelAsk=false;toast('Renewal cancelled. You keep Ledger Plus until '+fmtLong(P.sub.end));}),
+  'plan-resume':()=>planRun('Saving…',async()=>{takeSub(await subApi('resume',{id:P.id,token:P.token}));toast("You'll get a reminder before your month ends");}),
+  'plan-notify':async()=>{try{const r=await Notification.requestPermission();toast(r==='granted'?`We'll remind you ${PLAN.remindDays} days before your month ends`:'Notifications are off. You will still see a reminder in the app.');}catch(e){}openPlan();maybeNotify();},
+  copy:a=>{const done=()=>toast('Copied '+a);if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(a).then(done,()=>toast(a));else toast(a);}
+});
+CHANGE['proof-file']=(a,el)=>{const f=el.files&&el.files[0];el.value='';if(!f)return;
+  planRun('Uploading your receipt…',async()=>{const file=await fileToProof(f);takeSub(await subApi('proof',{id:P.id,token:P.token,file}));planView='pending';});};
 ACT.forget=()=>{S.consent.store=false;save();$('#wipeBox').innerHTML='';render();toast('Ledger will forget your transactions when you close this page');};
 
 document.addEventListener('click',e=>{const el=e.target.closest('[data-act]');if(!el)return;const f=ACT[el.dataset.act];if(f){if(el.tagName==='A')e.preventDefault();f(el.dataset.arg,el,e);}});
@@ -1389,11 +1612,17 @@ document.addEventListener('input',e=>{const k=e.target.dataset&&e.target.dataset
 document.addEventListener('submit',e=>{e.preventDefault();const f=e.target.dataset.form;
   if(f==='pw'){const pw=$('#pwIn').value;if(pendingFile&&pw)ingestFile(pendingFile,pw);}
   if(f==='chat')ask(chatDraft);
-  if(f==='manual')submitManual();});
+  if(f==='manual')submitManual();
+  if(f==='plan-start'){planDraft={name:$('#plName').value,phone:$('#plPhone').value,email:$('#plEmail').value};
+    if(!$('#plAgree').checked){planErr='Please tick the box to agree to the terms and privacy policy.';openPlan();return;}
+    planRun('Setting up…',async()=>{takeSub(await subApi('start',{...planDraft,agree:true}));planView='pay';});}
+  if(f==='plan-restore'){const id=$('#rsId').value,phone=$('#rsPhone').value;
+    planRun('Restoring…',async()=>{takeSub(await subApi('restore',{id,phone}));planView=null;toast(planActive()?'Ledger Plus restored on this phone':'Subscription linked to this phone');});}
+});
 $('#fileIn').addEventListener('change',e=>{const f=e.target.files[0];e.target.value='';if(f)ingestFile(f);});
 document.addEventListener('dragover',e=>{if(e.dataTransfer&&[...e.dataTransfer.types].includes('Files')){e.preventDefault();const d=e.target.closest&&e.target.closest('.drop');document.querySelectorAll('.drop.over').forEach(x=>x!==d&&x.classList.remove('over'));if(d)d.classList.add('over');}});
 document.addEventListener('dragleave',e=>{const d=e.target.closest&&e.target.closest('.drop');if(d&&!d.contains(e.relatedTarget))d.classList.remove('over');});
-document.addEventListener('drop',e=>{if(!e.dataTransfer||!e.dataTransfer.files.length)return;e.preventDefault();document.querySelectorAll('.drop.over').forEach(x=>x.classList.remove('over'));const d=e.target.closest&&e.target.closest('.drop');if(!d)return;const f=e.dataTransfer.files[0];if(!S.consent.read)openConsent(()=>ingestFile(f));else ingestFile(f);});
+document.addEventListener('drop',e=>{if(!e.dataTransfer||!e.dataTransfer.files.length)return;e.preventDefault();document.querySelectorAll('.drop.over').forEach(x=>x.classList.remove('over'));const d=e.target.closest&&e.target.closest('.drop');if(!d)return;const f=e.dataTransfer.files[0];gateUpload(()=>{if(!S.consent.read)openConsent(()=>ingestFile(f));else ingestFile(f);});});
 mq.addEventListener('change',()=>render());
 
 /* ================= boot ================= */
@@ -1406,5 +1635,8 @@ else{
   if('serviceWorker' in navigator&&/^https?:$/.test(location.protocol))window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
   window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();installEvt=e;render();});
   window.addEventListener('appinstalled',()=>{installEvt=null;toast('Ledger is installed');render();});
+  refreshPlan();
+  document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&P.id&&(!P.sub||Date.now()-(P.sub.checkedAt||0)>(P.sub.pending?60e3:30*60e3)))refreshPlan();});
+  setInterval(()=>{if(document.visibilityState==='visible'&&P.sub&&P.sub.pending)refreshPlan();},120e3);
 }
 </script>

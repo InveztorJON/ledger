@@ -103,3 +103,9 @@ Ask Claude for the change and it will give you updated files. On GitHub, open th
 | Coach stopped for everyone | Check your Anthropic credit and spend limit. |
 | A bank's PDF isn't read | Ask the user to try that bank's Excel/CSV export, and send Claude an anonymised sample layout to add support. |
 | Changes don't show up | Wait a minute and reopen the app. Installed apps update on the next open. |
+
+## Ledger Plus (added 5 October 2026)
+
+1. In Netlify: **Project configuration → Environment variables → Add a variable**. Key `ADMIN_KEY`, value: a long password only you know (at least 12 characters). Then **Deploys → Trigger deploy**.
+2. Open `https://jonspire-ledger.netlify.app/admin.html` and sign in with that password.
+3. See "Running Ledger Plus day to day" in DEVELOPING.md.

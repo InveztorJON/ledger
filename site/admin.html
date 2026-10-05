@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en-NG">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'">
+<title>Ledger Plus admin</title>
+<meta name="theme-color" content="#08784A">
+<link rel="icon" href="icons/favicon-32.png" sizes="32x32">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700;12..96,800&family=Figtree:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="app.css">
+<style>
+body{background:var(--bg)}
+.wrap{max-width:980px;margin:0 auto;padding:16px 16px 64px;display:grid;gap:16px}
+.bar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.filters{display:flex;gap:8px;flex-wrap:wrap}
+.filters button{appearance:none;border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:999px;min-height:40px;padding:0 14px;font:inherit;font-weight:600;cursor:pointer}
+.filters button[aria-pressed="true"]{background:var(--green);border-color:var(--green);color:var(--green-ink)}
+.sub{display:grid;gap:12px}
+.sub .who{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:flex-start}
+.sub .who h2{font-size:1.15rem}
+.meta{display:flex;gap:6px 14px;flex-wrap:wrap;font-size:.86rem;color:var(--ink-2)}
+.proof{display:grid;gap:12px;border-top:1px solid var(--line);padding-top:12px}
+@media (min-width:760px){.proof{grid-template-columns:260px 1fr}}
+.thumb{border:1px solid var(--line);border-radius:12px;background:var(--surface-2);min-height:120px;display:grid;place-items:center;overflow:hidden}
+.thumb img{display:block;width:100%;height:auto;cursor:zoom-in}
+.flags{margin:0;padding-left:18px;font-size:.88rem}
+.flags li{margin:3px 0}
+.read{font-size:.84rem;color:var(--ink-2);display:grid;grid-template-columns:auto 1fr;gap:2px 10px}
+.read b{color:var(--ink);font-weight:600}
+.big{position:fixed;inset:0;background:rgba(0,0,0,.8);display:grid;place-items:center;padding:16px;z-index:50;cursor:zoom-out}
+.big img{max-width:100%;max-height:100%}
+.empty{padding:28px;text-align:center;color:var(--ink-2)}
+</style>
+</head>
+<body>
+<main class="wrap" id="root" aria-live="polite"></main>
+<script src="admin.js"></script>
+</body>
+</html>

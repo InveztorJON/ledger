@@ -3,6 +3,9 @@
   publish = "site"
   functions = "netlify/functions"
 
+[functions]
+  node_bundler = "esbuild"
+
 [[headers]]
   for = "/*"
   [headers.values]
@@ -22,3 +25,9 @@
   for = "/index.html"
   [headers.values]
     Cache-Control = "no-cache"
+
+[[headers]]
+  for = "/admin.html"
+  [headers.values]
+    Cache-Control = "no-store"
+    X-Robots-Tag = "noindex, nofollow"
