@@ -4,11 +4,12 @@
 //   proof    {id, token, file:{type, data}}       -> stores a proof of payment for review (base64, image or PDF)
 //   cancel   {id, token}                          -> won't renew; access continues until the end date
 //   resume   {id, token}                          -> undo cancel
+//   use      {id, token}                          -> counts one statement upload against this month's allowance (20)
 //   restore  {id, phone}                          -> use the subscription on another device; returns a new token
 // Privacy: request bodies are never logged.
 
 import { json, allowedOrigin, clientIp, limit, readJson } from '../lib/http.mjs';
-import { PLAN, newId, newToken, sha256, normPhone, cleanText, validId, publicView } from '../lib/plan.mjs';
+import { PLAN, newId, newToken, sha256, normPhone, cleanText, validId, publicView, applyUse } from '../lib/plan.mjs';
 import { stores } from '../lib/store.mjs';
 
 const MAX_PROOF = 3.5 * 1024 * 1024;
@@ -72,6 +73,13 @@ export default async (req, context) => {
     if (!rec) return json(401, { error: 'Subscription not found on this device. Use "Restore" with your code and phone number.' });
 
     if (action === 'status') return json(200, publicView(rec));
+
+    if (action === 'use') {
+      if (!(rec.end && Date.parse(rec.end) > Date.now())) return json(402, { error: 'Ledger Plus is not active.', ...publicView(rec) });
+      const ok = applyUse(rec);
+      if (ok) await st.putSub(rec);
+      return json(ok ? 200 : 402, ok ? publicView(rec) : { error: "You've used all your statement uploads for this month.", ...publicView(rec) });
+    }
 
     if (action === 'cancel' || action === 'resume') {
       if (!(rec.end && Date.parse(rec.end) > Date.now())) return json(400, { error: 'There is no active subscription to change.' });

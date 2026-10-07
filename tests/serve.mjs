@@ -25,7 +25,7 @@ globalThis.fetch = async (url, init) => {
     const q = body.messages[body.messages.length - 1].content;
     if (Array.isArray(q)) {   // receipt check
       const ids = [...mem.subs.keys()]; const id = ids[ids.length - 1];
-      const read = { is_receipt: true, amount_naira: 1500, beneficiary_account: '1029821937', beneficiary_name: 'JONSPIRE LIMITED', beneficiary_bank: 'UBA', date: new Date().toISOString().slice(0, 10), narration: 'Ledger ' + id, sender_name: 'ADA OBI', transaction_status: 'Successful', edits_suspected: false, notes: '' };
+      const read = { is_receipt: true, amount_naira: 10000, beneficiary_account: '1029821937', beneficiary_name: 'JONSPIRE LIMITED', beneficiary_bank: 'UBA', date: new Date().toISOString().slice(0, 10), narration: 'Ledger ' + id, sender_name: 'ADA OBI', transaction_status: 'Successful', edits_suspected: false, notes: '' };
       return new Response(JSON.stringify({ content: [{ type: 'text', text: JSON.stringify(read) }] }), { status: 200 });
     }
     return new Response(JSON.stringify({ content: [{ type: 'text', text: `Mock coach answer to: ${q}` }] }), { status: 200 });
@@ -41,6 +41,9 @@ http.createServer(async (req, res) => {
   if (url.pathname === '/__setEnd') {   // test hook: move a subscription's end date to now + days
     const rec = JSON.parse(mem.subs.get(url.searchParams.get('id')));
     rec.end = new Date(Date.now() + Number(url.searchParams.get('days')) * 864e5).toISOString();
+    // keep the paid-month record consistent with the new end date (one period, usage carried over)
+    const used = (rec.periods || []).reduce((m, p) => Math.max(m, p.used || 0), 0);
+    rec.periods = [{ start: new Date(Date.now() - 864e5).toISOString(), end: rec.end, approvedAt: rec.end, proof: 'test', used }];
     mem.subs.set(rec.id, JSON.stringify(rec)); res.writeHead(200); res.end('ok'); return;
   }
   if (handler) {

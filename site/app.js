@@ -1,7 +1,7 @@
 /* ===== Ledger settings: edit before launch ===== */
 window.LEDGER_CONTACT_EMAIL = 'jonspirelimited@gmail.com';   // shown in the app for questions and feedback
 // Ledger Plus: free trial and subscription. Keep in sync with netlify/lib/plan.mjs (tests check this).
-window.LEDGER_PLAN = {freeUploads: 5, priceNaira: 1500, bank: 'UBA', accountName: 'JONSPIRE LIMITED', accountNumber: '1029821937', remindDays: 3, appUrl: 'https://jonspire-ledger.netlify.app'};
+window.LEDGER_PLAN = {freeUploads: 2, priceNaira: 10000, monthlyUploads: 20, warnAt: 0.8, bank: 'UBA', accountName: 'JONSPIRE LIMITED', accountNumber: '1029821937', remindDays: 3, appUrl: 'https://jonspire-ledger.netlify.app'};
 /* ================================================= */
 'use strict';
 /* ================= utilities ================= */
@@ -64,15 +64,21 @@ let chat=[], chatBusy=false, liveText='', chatCtl=null, chatDraft='', sampleFn=n
 let ciDraft={};
 
 /* ================= Ledger Plus: free trial and subscription ================= */
-const PLAN=Object.assign({freeUploads:5,priceNaira:1500,bank:'UBA',accountName:'JONSPIRE LIMITED',accountNumber:'1029821937',remindDays:3,appUrl:''},window.LEDGER_PLAN||{});
+const PLAN=Object.assign({freeUploads:2,priceNaira:10000,monthlyUploads:20,warnAt:0.8,bank:'UBA',accountName:'JONSPIRE LIMITED',accountNumber:'1029821937',remindDays:3,appUrl:''},window.LEDGER_PLAN||{});
 const PKEY='ledger_plan';
 function loadPlan(){try{const p=JSON.parse(localStorage.getItem(PKEY)||'null');if(p&&typeof p==='object')return p;}catch(e){}return{};}
 let P=loadPlan();
 function savePlan(){try{localStorage.setItem(PKEY,JSON.stringify(P));}catch(e){}}
 if(typeof P.used!=='number'){P.used=S.demo?0:Math.min(S.statements.length,PLAN.freeUploads);savePlan();}
 const planActive=()=>!!(P.sub&&P.sub.end&&Date.parse(P.sub.end)>Date.now());
+const monthLimit=()=>PLAN.monthlyUploads;
+const monthUsed=()=>planActive()?Math.min(monthLimit(),(P.sub&&P.sub.usage&&P.sub.usage.used)||0):0;
+const monthLeft=()=>monthLimit()-monthUsed();
+const monthFull=()=>planActive()&&monthUsed()>=monthLimit();
+const warnAtCount=()=>Math.ceil(monthLimit()*PLAN.warnAt);
+const monthWarn=()=>planActive()&&monthUsed()>=warnAtCount()&&!monthFull();
 const freeLeft=()=>Math.max(0,PLAN.freeUploads-(P.used||0));
-const canUpload=()=>planActive()||freeLeft()>0;
+const canUpload=()=>planActive()?!monthFull():freeLeft()>0;
 const planDaysLeft=()=>P.sub&&P.sub.end?Math.max(0,Math.ceil((Date.parse(P.sub.end)-Date.now())/864e5)):0;
 const planExpired=()=>!!(P.sub&&P.sub.end&&!planActive());
 const renewDue=()=>planActive()&&planDaysLeft()<=PLAN.remindDays&&!P.sub.cancelAtEnd&&!P.sub.pending;
@@ -83,14 +89,14 @@ let planView=null, planBusy=false, planErr='', planDraft={name:'',phone:'',email
 async function subApi(action,body){
   const r=await fetch('/api/sub/'+action,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});
   let d={};try{d=await r.json();}catch(e){}
-  if(!r.ok){const e=new Error(d.error||'Something went wrong. Try again.');e.status=r.status;throw e;}
+  if(!r.ok){const e=new Error(d.error||'Something went wrong. Try again.');e.status=r.status;e.data=d;throw e;}
   return d;
 }
 function takeSub(d){
   const prev=P.sub;
-  P.sub={id:d.id,name:d.name,status:d.status,end:d.end,cancelAtEnd:!!d.cancelAtEnd,pending:!!d.pending,rejectedReason:d.rejectedReason||'',checkedAt:Date.now()};
+  P.sub={id:d.id,name:d.name,status:d.status,end:d.end,cancelAtEnd:!!d.cancelAtEnd,pending:!!d.pending,rejectedReason:d.rejectedReason||'',usage:d.usage||null,checkedAt:Date.now()};
   if(d.id)P.id=d.id;if(d.token)P.token=d.token;savePlan();
-  if(prev&&prev.status!=='active'&&d.status==='active'){planView=null;setTimeout(()=>{closeSheet();celebrate('Ledger Plus is active',`Your payment was verified. Upload as many statements as you like until ${fmtLong(d.end)}.`,'check');},0);}
+  if(prev&&prev.status!=='active'&&d.status==='active'){planView=null;setTimeout(()=>{closeSheet();celebrate('Ledger Plus is active',`Your payment was verified. You can upload up to ${PLAN.monthlyUploads} statements until ${fmtLong(d.end)}.`,'check');},0);}
   else if(prev&&prev.end&&d.end&&d.end>prev.end&&prev.status==='active')toast('Renewal verified. Ledger Plus now runs until '+fmtLong(d.end));
 }
 async function refreshPlan(){
@@ -101,15 +107,37 @@ async function refreshPlan(){
 }
 function gateUpload(then){
   if(canUpload())return then();
-  openPlan('limit');
-  if(P.id&&!IN_VIEWER)refreshPlan().then(()=>{if(canUpload()&&$('#planSheet')){closeSheet();toast('Ledger Plus is active. Choose your statement again.');}});
+  openPlan(monthFull()?'full':'limit');
+  if(P.id&&!IN_VIEWER)refreshPlan().then(()=>{if(canUpload()&&$('#planSheet')){closeSheet();toast('Your plan is active. Choose your statement again.');}});
 }
+// Counts one upload. Free uploads are counted on this device; paid uploads are counted by our server (the record that counts),
+// and the app keeps its own tally in step so the meter is right even offline.
 function countUpload(){
-  if(planActive())return;
+  if(planActive()){
+    const u=P.sub.usage||{used:0,limit:monthLimit()};u.used=Math.min(monthLimit(),(u.used||0)+1);P.sub.usage=u;savePlan();
+    if(!IN_VIEWER&&P.id&&P.token)subApi('use',{id:P.id,token:P.token}).then(takeSub,e=>{if(e&&e.status===402&&e.data)takeSub(e.data);}).finally(()=>{usageNudge();render();});
+    else usageNudge();
+    return;
+  }
   P.used=(P.used||0)+1;savePlan();
   const left=freeLeft();
-  if(left===1)toast('1 free statement upload left');
-  else if(left===0)toast(`That was your last free upload. Ledger Plus is ${priceTxt()} a month.`);
+  if(left>0)toast(`${left} free statement upload${left===1?'':'s'} left`);
+  else setTimeout(()=>openPlan('limit'),900);
+}
+// At 80% and at 100% of the month's allowance, ask the person to renew or cancel.
+function usageNudge(){
+  if(!planActive())return;
+  const used=monthUsed(),key=P.sub.end+'|'+(monthFull()?'full':monthWarn()?'warn':'');
+  if(!monthFull()&&!monthWarn())return;
+  if(P.nudged===key)return;P.nudged=key;savePlan();
+  if(monthFull())toast(`That was upload ${used} of ${monthLimit()}. Renew to keep uploading.`);
+  else toast(`${used} of ${monthLimit()} uploads used this month. ${monthLeft()} left.`);
+  setTimeout(()=>{closeSheet();openPlan(monthFull()?'full':'warn');},1100);
+  usageNotify();
+}
+async function usageNotify(){
+  if(!notifyOk()||Notification.permission!=='granted')return;
+  try{const reg=await navigator.serviceWorker.ready;reg.showNotification(monthFull()?'Ledger Plus: all uploads used':`Ledger Plus: ${Math.round(PLAN.warnAt*100)}% of uploads used`,{body:monthFull()?`You've used all ${monthLimit()} uploads. Renew for ${priceTxt()} to keep going.`:`${monthUsed()} of ${monthLimit()} used. Renew for ${priceTxt()} or cancel.`,icon:'icons/icon-192.png',badge:'icons/favicon-32.png',tag:'ledger-usage'});}catch(e){}
 }
 
 /* ---------- plan sheet ---------- */
@@ -128,8 +156,10 @@ function planHTML(reason){
   const head=`<button class="btn q sm x" data-act="close" aria-label="Close">${ic('x')}</button>`;
   const err=planErr?`<div class="status err" role="alert">${esc(planErr)}</div>`:'';
   const busy=planBusy?`<div class="status busy" role="status"><span class="spin" aria-hidden="true"></span>${esc(planBusy)}</div>`:'';
-  const intro=reason==='limit'&&!planActive()?`<div class="status ok"><b>You've used your ${PLAN.freeUploads} free statement uploads.</b> Everything you've uploaded stays here. To upload more, subscribe to Ledger Plus.</div>`:'';
-  const what=`<ul class="evidence"><li>Upload as many statements as you like for one month</li><li>${priceTxt()} a month by bank transfer. No card needed, no automatic charges</li><li>We remind you ${PLAN.remindDays} days before your month ends, so you can renew or cancel</li></ul>`;
+  const intro=reason==='limit'&&!planActive()?`<div class="status ok"><b>You've used your ${PLAN.freeUploads} free statement uploads.</b> Everything you've uploaded stays here. To keep going, subscribe to Ledger Plus.</div>`
+   :reason==='full'&&planActive()?`<div class="status err" role="alert"><b>You've used all ${monthLimit()} uploads for this month.</b> Renew for ${priceTxt()} to start a new month of ${monthLimit()} uploads right away, or cancel. Your data stays here either way.</div>`
+   :reason==='warn'&&planActive()?`<div class="status busy" role="status"><b>${monthUsed()} of ${monthLimit()} uploads used.</b> ${monthLeft()} left this month. Renew now to keep uploading without a break, or cancel if you're done.</div>`:'';
+  const what=`<ul class="evidence"><li>Up to ${PLAN.monthlyUploads} statement uploads each month</li><li>${priceTxt()} a month by bank transfer. No card needed, no automatic charges</li><li>We remind you ${PLAN.remindDays} days before your month ends, so you can renew or cancel</li></ul>`;
   if(IN_VIEWER)return`<div id="planSheet" class="stack">${head}<h2>Ledger Plus · ${priceTxt()} a month</h2>${intro}${what}${payBox()}<p class="small">To subscribe and upload your proof of payment, open the Ledger app${PLAN.appUrl?`: <a href="${esc(PLAN.appUrl)}" target="_blank" rel="noopener">${esc(PLAN.appUrl.replace(/^https?:\/\//,''))}</a>`:''}.</p></div>`;
   const s=P.sub||{};
   let v=planView;
@@ -155,7 +185,7 @@ function planHTML(reason){
     const renewing=planActive();
     const rej=s.status==='rejected'&&!renewing?`<div class="status err" role="alert"><b>We couldn't verify your last receipt.</b> ${esc(s.rejectedReason||'')} Check the details below and upload again, or contact ${esc(CONTACT_EMAIL)}.</div>`:'';
     return`<div id="planSheet" class="stack">${head}<h2>${renewing?'Renew Ledger Plus':planExpired()?'Renew Ledger Plus':'Pay for Ledger Plus'}</h2>${intro}${rej}
-     ${renewing?`<p class="small muted">Your new month starts when the current one ends on ${fmtLong(s.end)}, so you don't lose any days.</p>`:''}
+     ${renewing?(monthFull()?`<p class="small muted">You've used all ${monthLimit()} uploads, so your new month starts as soon as your payment is verified.</p>`:`<p class="small muted">Your new month starts when the current one ends on ${fmtLong(s.end)}, so you don't lose any days.</p>`):''}
      <p class="small"><b>Step 2.</b> Transfer exactly ${priceTxt()} from your bank app or USSD to:</p>${payBox()}
      <p class="tiny">Put your code <b>${esc(P.id)}</b> in the narration so we can match your payment quickly.</p>
      <p class="small"><b>Step 3.</b> Upload a screenshot or PDF of the successful transfer.</p>
@@ -176,10 +206,11 @@ function planHTML(reason){
   }
   // active
   const dl=planDaysLeft();
-  return`<div id="planSheet" class="stack">${head}<h2>Ledger Plus is active</h2>
-   <div class="status ok">Unlimited statement uploads until <b>${fmtLong(s.end)}</b> · ${dl} day${dl===1?'':'s'} left.</div>
-   ${s.cancelAtEnd?`<p class="small">You chose not to renew. You keep Ledger Plus until ${fmtLong(s.end)}, then uploads lock again. Your data stays.</p><div class="row"><button class="btn" data-act="plan-resume">Keep my subscription</button></div>`
-   :`<p class="small muted">We'll remind you ${PLAN.remindDays} days before it ends. Renewing early is fine: the new month starts when this one ends.</p>
+  return`<div id="planSheet" class="stack">${head}<h2>Ledger Plus is active</h2>${intro}
+   <div class="status ok">Active until <b>${fmtLong(s.end)}</b> · ${dl} day${dl===1?'':'s'} left.</div>
+   ${usageMeter()}
+   ${s.cancelAtEnd?`<p class="small">You chose not to renew. You keep Ledger Plus until ${fmtLong(s.end)} or until your ${monthLimit()} uploads are used, then uploads lock again. Your data stays.</p><div class="row"><button class="btn" data-act="plan-resume">Keep my subscription</button></div>`
+   :`<p class="small muted">We'll remind you ${PLAN.remindDays} days before it ends, and when you've used ${Math.round(PLAN.warnAt*100)}% of your uploads. Renewing early is fine: the new month starts when this one ends (or straight away if you've used all ${monthLimit()} uploads).</p>
      <div class="row"><button class="btn" data-act="plan-view" data-arg="pay">Renew for ${priceTxt()}</button><button class="btn q" data-act="plan-cancel-ask">Cancel renewal</button></div>
      ${cancelAsk?`<div class="status err"><p class="small"><b>Cancel renewal?</b> Nothing is charged automatically. You keep Ledger Plus until ${fmtLong(s.end)} and we stop reminding you.</p><div class="row" style="margin-top:10px"><button class="btn danger sm" data-act="plan-cancel">Cancel renewal</button><button class="btn q sm" data-act="plan-cancel-no">Keep it</button></div></div>`:''}`}
    ${notifyOffer()}
@@ -216,8 +247,12 @@ function b64(blob){return new Promise((res,rej)=>{const r=new FileReader();r.onl
 async function planRun(label,fn){planBusy=label;planErr='';openPlan();try{await fn();}catch(e){planErr=e.message||'Something went wrong. Try again.';if(e.status===401){planErr='This phone is no longer linked to your subscription. Use Restore with your code and phone number.';}}finally{planBusy=false;if($('#planSheet'))openPlan();render();}}
 
 /* ---------- plan on the page ---------- */
+function usageMeter(){
+  const u=monthUsed(),L=monthLimit(),cls=monthFull()?'bad':monthWarn()?'warn':'info';
+  return`<div class="usage"><div class="head"><p class="small"><b>${u} of ${L}</b> statement uploads used this month</p><span class="chip ${cls}">${monthFull()?'All used':monthLeft()+' left'}</span></div><div class="xp ${cls}" role="progressbar" aria-label="Uploads used this month" aria-valuemin="0" aria-valuemax="${L}" aria-valuenow="${u}"><i style="width:${u/L*100}%"></i></div></div>`;
+}
 function planLine(){
-  if(planActive())return`<div class="planline good">${ic('check')}<span><b>Ledger Plus</b> · unlimited uploads until ${fmtLong(P.sub.end)}</span></div>`;
+  if(planActive())return`<div class="planline good">${ic('check')}<span><b>Ledger Plus</b> · ${monthUsed()} of ${monthLimit()} uploads used · until ${fmtLong(P.sub.end)}</span></div>`;
   if(P.sub&&P.sub.pending)return`<div class="planline">${ic('check')}<span>Payment received, being verified. <button class="btn link" data-act="plan">Details</button></span></div>`;
   const left=freeLeft();
   if(left>0)return`<div class="planline">${ic('star')}<span>Free trial: <b>${left} of ${PLAN.freeUploads}</b> statement upload${left===1?'':'s'} left</span></div>`;
@@ -226,6 +261,8 @@ function planLine(){
 function planBanner(){
   if(IN_VIEWER||!P.sub)return'';
   const s=P.sub;
+  if(monthFull())return`<div class="banner" role="alert"><p><b>You've used all ${monthLimit()} uploads for this month.</b> Renew for ${priceTxt()} to keep uploading, or cancel. Your data stays here.</p><div class="row"><button class="btn sm" data-act="plan-renew">Renew</button><button class="btn q sm" data-act="plan-cancel-open">Cancel</button></div></div>`;
+  if(monthWarn())return`<div class="banner" role="status"><p><b>${monthUsed()} of ${monthLimit()} uploads used.</b> You're past ${Math.round(PLAN.warnAt*100)}% for this month. Renew for ${priceTxt()} so you don't get cut off, or cancel if you don't need more.</p><div class="row"><button class="btn sm" data-act="plan-renew">Renew</button><button class="btn q sm" data-act="plan-cancel-open">Cancel</button></div></div>`;
   if(renewDue()){const dl=planDaysLeft();return`<div class="banner" role="status"><p><b>Ledger Plus ends in ${dl} day${dl===1?'':'s'}, on ${fmtLong(s.end)}.</b> Renew for ${priceTxt()} to keep uploading statements, or cancel if you don't need it.</p><div class="row"><button class="btn sm" data-act="plan-renew">Renew</button><button class="btn q sm" data-act="plan-cancel-open">Cancel</button></div></div>`;}
   if(planExpired()&&!s.pending)return`<div class="banner"><p><b>Ledger Plus ended on ${fmtLong(s.end)}.</b> Your data is still here. Renew for ${priceTxt()} to upload new statements.</p><div class="row"><button class="btn sm" data-act="plan-renew">Renew</button></div></div>`;
   if(s.status==='rejected'&&!planActive())return`<div class="banner"><p><b>We couldn't verify your payment.</b> ${esc(s.rejectedReason||'')}</p><div class="row"><button class="btn sm" data-act="plan-renew">See details</button></div></div>`;
@@ -234,11 +271,11 @@ function planBanner(){
 function planCard(){
   const s=P.sub||{};
   let body;
-  if(planActive())body=`<div class="head"><div><h2>Ledger Plus</h2><p class="muted small">Active until ${fmtLong(s.end)} · ${planDaysLeft()} days left${s.cancelAtEnd?' · won\'t renew':''}</p></div><span class="chip good">${ic('check')}Active</span></div>`;
+  if(planActive())body=`<div class="head"><div><h2>Ledger Plus</h2><p class="muted small">Active until ${fmtLong(s.end)} · ${planDaysLeft()} days left${s.cancelAtEnd?' · won\'t renew':''}</p></div><span class="chip good">${ic('check')}Active</span></div>${usageMeter()}`;
   else if(s.pending)body=`<div class="head"><div><h2>Ledger Plus</h2><p class="muted small">Payment received, being verified (usually within 24 hours)</p></div><span class="chip warn">Verifying</span></div>`;
   else{const used=Math.min(P.used||0,PLAN.freeUploads);body=`<div class="head"><div><h2>${planExpired()?'Ledger Plus ended':'Free trial'}</h2><p class="muted small">${planExpired()?`Ended ${fmtLong(s.end)}. `:''}${used} of ${PLAN.freeUploads} free statement uploads used</p></div><span class="chip ${freeLeft()?'info':'bad'}">${freeLeft()} left</span></div><div class="xp" role="progressbar" aria-label="Free uploads used" aria-valuemin="0" aria-valuemax="${PLAN.freeUploads}" aria-valuenow="${used}"><i style="width:${used/PLAN.freeUploads*100}%"></i></div>`;}
   return`<section class="card" id="plan">${body}
-   <p class="small muted" style="margin-top:10px">Ledger Plus: unlimited statement uploads for ${priceTxt()} a month, paid by bank transfer to ${esc(PLAN.accountName)} (${esc(PLAN.bank)}).</p>
+   <p class="small muted" style="margin-top:10px">Ledger Plus: up to ${PLAN.monthlyUploads} statement uploads a month for ${priceTxt()}, paid by bank transfer to ${esc(PLAN.accountName)} (${esc(PLAN.bank)}).</p>
    <div class="row" style="margin-top:12px"><button class="btn sm" data-act="plan">${planActive()?'Manage':s.pending?'See status':planExpired()?'Renew':'Get Ledger Plus'}</button>${!IN_VIEWER&&!P.id?'<button class="btn q sm" data-act="plan-restore-open">Restore on this phone</button>':''}</div>
    ${P.id?`<p class="tiny" style="margin-top:10px">Your code: <b class="num">${esc(P.id)}</b></p>`:''}</section>`;
 }

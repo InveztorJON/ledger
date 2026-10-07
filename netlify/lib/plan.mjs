@@ -2,8 +2,10 @@
 // Keep PLAN in sync with window.LEDGER_PLAN at the top of site/app.js (tests/test_subs.mjs checks this).
 
 export const PLAN = {
-  freeUploads: 5,
-  priceNaira: 1500,
+  freeUploads: 2,
+  priceNaira: 10000,
+  monthlyUploads: 20,   // statement uploads allowed in each paid month
+  warnAt: 0.8,          // warn (and ask renew or cancel) when this share is used
   bank: 'UBA',
   accountName: 'JONSPIRE LIMITED',
   accountNumber: '1029821937',
@@ -53,6 +55,29 @@ export function addMonth(iso) {
   return d.toISOString();
 }
 
+// The paid month we are in now: the latest period that has started. Renewals paid early are queued after it.
+export function currentPeriod(rec, now = Date.now()) {
+  const ps = rec.periods || [];
+  let cur = null;
+  for (const p of ps) if (Date.parse(p.start) <= now && Date.parse(p.end) > now) cur = p;
+  return cur;
+}
+export const warnCount = () => Math.ceil(PLAN.monthlyUploads * PLAN.warnAt);
+export function usageOf(rec, now = Date.now()) {
+  const cur = currentPeriod(rec, now);
+  const used = cur ? Math.min(cur.used || 0, PLAN.monthlyUploads) : 0;
+  const limit = PLAN.monthlyUploads;
+  return { used, limit, remaining: limit - used, limitReached: !!cur && used >= limit, warn: !!cur && used >= warnCount() && used < limit };
+}
+// Count one statement upload against the current paid month. Returns false when the month's allowance is spent.
+export function applyUse(rec, now = Date.now()) {
+  const cur = currentPeriod(rec, now);
+  if (!cur) return false;
+  if ((cur.used || 0) >= PLAN.monthlyUploads) return false;
+  cur.used = (cur.used || 0) + 1;
+  return true;
+}
+
 // What the app is allowed to see about a subscription.
 export function publicView(rec, now = Date.now()) {
   const end = rec.end ? Date.parse(rec.end) : 0;
@@ -67,8 +92,9 @@ export function publicView(rec, now = Date.now()) {
     id: rec.id, name: rec.name, status, end: rec.end || null, daysLeft,
     cancelAtEnd: !!rec.cancelAtEnd, pending,
     renewDue: active && daysLeft <= PLAN.remindDays && !rec.cancelAtEnd && !pending,
+    usage: active ? usageOf(rec, now) : null,
     rejectedReason: last && last.state === 'rejected' ? last.reason || '' : '',
-    plan: { priceNaira: PLAN.priceNaira, bank: PLAN.bank, accountName: PLAN.accountName, accountNumber: PLAN.accountNumber }
+    plan: { priceNaira: PLAN.priceNaira, monthlyUploads: PLAN.monthlyUploads, bank: PLAN.bank, accountName: PLAN.accountName, accountNumber: PLAN.accountNumber }
   };
 }
 
@@ -77,12 +103,15 @@ export function applyApproval(rec, proofKey, now = Date.now()) {
   const p = (rec.proofs || []).find(x => x.key === proofKey);
   if (!p) throw new Error('proof not found');
   if (p.state === 'approved') return rec;
-  const startMs = Math.max(now, rec.end ? Date.parse(rec.end) : 0);
+  // A renewal normally continues from the old end so no days are lost. If the month's 20 uploads are already
+  // spent, the person is paying to keep going, so the new month starts now.
+  const spent = rec.end && Date.parse(rec.end) > now && usageOf(rec, now).limitReached;
+  const startMs = spent ? now : Math.max(now, rec.end ? Date.parse(rec.end) : 0);
   const start = new Date(startMs).toISOString();
   const end = addMonth(start);
   p.state = 'approved'; p.decidedAt = new Date(now).toISOString(); p.reason = '';
   rec.periods = rec.periods || [];
-  rec.periods.push({ start, end, approvedAt: p.decidedAt, proof: proofKey });
+  rec.periods.push({ start, end, approvedAt: p.decidedAt, proof: proofKey, used: 0 });
   rec.end = end;
   rec.cancelAtEnd = false;
   return rec;

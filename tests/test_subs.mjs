@@ -45,8 +45,8 @@ const appPlan = m ? Function('return ' + m[1])() : {};
 t('app and server agree on price, free uploads and bank account',
   appPlan.freeUploads === plan.PLAN.freeUploads && appPlan.priceNaira === plan.PLAN.priceNaira && appPlan.accountNumber === plan.PLAN.accountNumber && appPlan.accountName === plan.PLAN.accountName && appPlan.bank === plan.PLAN.bank && appPlan.remindDays === plan.PLAN.remindDays,
   JSON.stringify(appPlan));
-t('plan is ₦1,500, 5 free uploads, JONSPIRE LIMITED UBA 1029821937, remind 3 days before',
-  plan.PLAN.priceNaira === 1500 && plan.PLAN.freeUploads === 5 && plan.PLAN.accountName === 'JONSPIRE LIMITED' && plan.PLAN.bank === 'UBA' && plan.PLAN.accountNumber === '1029821937' && plan.PLAN.remindDays === 3);
+t('plan is ₦10,000, 2 free uploads, JONSPIRE LIMITED UBA 1029821937, remind 3 days before',
+  plan.PLAN.priceNaira === 10000 && plan.PLAN.freeUploads === 2 && plan.PLAN.accountName === 'JONSPIRE LIMITED' && plan.PLAN.bank === 'UBA' && plan.PLAN.accountNumber === '1029821937' && plan.PLAN.remindDays === 3);
 
 // helpers
 t('phone numbers normalise', plan.normPhone('0803 123 4567') === '2348031234567' && plan.normPhone('+234 803 123 4567') === '2348031234567' && plan.normPhone('12345') === null);
@@ -56,7 +56,7 @@ t('one month: 31 Jan → 28 Feb, 15 Mar → 15 Apr', plan.addMonth('2027-01-31T1
 let r = await S('start', { name: 'Ada Obi', phone: '08031234567', agree: true });
 t('start creates a subscription with a code and token', r.status === 200 && /^LDG-[2-9A-HJ-NP-Z]{6}$/.test(r.body.id) && r.body.token && r.body.status === 'unpaid', JSON.stringify(r.body));
 const { id, token } = r.body;
-t('start returns the bank details', r.body.plan.accountNumber === '1029821937' && r.body.plan.accountName === 'JONSPIRE LIMITED' && r.body.plan.priceNaira === 1500);
+t('start returns the bank details', r.body.plan.accountNumber === '1029821937' && r.body.plan.accountName === 'JONSPIRE LIMITED' && r.body.plan.priceNaira === 10000);
 t('token is stored only as a hash', !mem.subs.get(id).includes(token));
 t('start needs agreement', (await S('start', { name: 'Ada Obi', phone: '08031234567' })).status === 400);
 t('start rejects a bad phone', (await S('start', { name: 'Ada Obi', phone: '123', agree: true })).status === 400);
@@ -91,7 +91,7 @@ t('admin can open the proof file', r.status === 200 && r.ct === 'image/png' && r
 t('admin proof key is validated', (await AD('proof', null, { method: 'GET', qs: '?key=../../etc' })).status === 400);
 
 // AI check
-aiReply = { is_receipt: true, amount_naira: 1500, beneficiary_account: '1029821937', beneficiary_name: 'JONSPIRE LIMITED', beneficiary_bank: 'UBA', date: new Date().toISOString().slice(0, 10), narration: 'Ledger ' + id, sender_name: 'ADA OBI', transaction_status: 'Successful', edits_suspected: false, notes: '' };
+aiReply = { is_receipt: true, amount_naira: 10000, beneficiary_account: '1029821937', beneficiary_name: 'JONSPIRE LIMITED', beneficiary_bank: 'UBA', date: new Date().toISOString().slice(0, 10), narration: 'Ledger ' + id, sender_name: 'ADA OBI', transaction_status: 'Successful', edits_suspected: false, notes: '' };
 r = await AD('check', { id, key });
 let chk = r.body.proofs[0].check;
 t('AI check: matching receipt looks right', r.status === 200 && chk.verdict === 'looks_right' && chk.flags.length === 0, JSON.stringify(chk));
@@ -101,10 +101,10 @@ t('AI check: wrong amount and account are flagged', chk.verdict === 'check_caref
 t('AI check never logs receipt contents', !logs.join(' ').includes('JONSPIRE') && !logs.join(' ').includes('ADA OBI'));
 
 // reject → user sees reason
-r = await AD('reject', { id, key, reason: 'No ₦1,500 credit from Ada Obi found.' });
+r = await AD('reject', { id, key, reason: 'No ₦10,000 credit from Ada Obi found.' });
 t('reject works', r.status === 200 && r.body.proofs[0].state === 'rejected');
 r = await S('status', { id, token });
-t('user sees rejected with the reason', r.body.status === 'rejected' && r.body.rejectedReason.includes('No ₦1,500'));
+t('user sees rejected with the reason', r.body.status === 'rejected' && r.body.rejectedReason.includes('No ₦10,000'));
 
 // new proof + approve → active for one month
 await S('proof', { id, token, file: { type: 'image/png', data: png } });
@@ -118,6 +118,31 @@ t('user is active for one calendar month from approval', r.body.status === 'acti
 t('approving twice does not add another month', (await AD('approve', { id, key: key2 })).body.end === r.body.end);
 t('cannot reject an approved payment', (await AD('reject', { id, key: key2 })).status === 400);
 t('no renewal reminder at the start of the month', r.body.renewDue === false);
+
+// monthly allowance: 20 uploads, warning at 80% (16)
+t('plan caps a paid month at 20 uploads, warns at 80%', plan.PLAN.monthlyUploads === 20 && plan.PLAN.warnAt === 0.8 && plan.warnCount() === 16);
+t('a fresh month shows 0 of 20 used', r.body.usage && r.body.usage.used === 0 && r.body.usage.limit === 20 && !r.body.usage.warn && !r.body.usage.limitReached);
+let u;
+for (let i = 1; i <= 15; i++) u = await S('use', { id, token });
+t('15 uploads: counted, no warning yet', u.status === 200 && u.body.usage.used === 15 && u.body.usage.warn === false);
+u = await S('use', { id, token });
+t('16th upload (80%) raises the warning', u.status === 200 && u.body.usage.used === 16 && u.body.usage.warn === true && u.body.usage.limitReached === false);
+for (let i = 17; i <= 19; i++) u = await S('use', { id, token });
+u = await S('use', { id, token });
+t('20th upload is allowed and fills the month', u.status === 200 && u.body.usage.used === 20 && u.body.usage.limitReached === true && u.body.usage.remaining === 0);
+u = await S('use', { id, token });
+t('21st upload is refused with the month full', u.status === 402 && u.body.usage.used === 20 && u.body.usage.limitReached === true);
+t('use needs the right token', (await S('use', { id, token: 'nope' })).status === 401);
+t('use is refused when there is no active plan', (await S('use', { id: (await S('start', { name: 'Free Person', phone: '08039999999', agree: true })).body.id, token: 'x' })).status === 401);
+// renewing when all 20 are used starts a new month now with a fresh allowance
+await S('proof', { id, token, file: { type: 'image/png', data: png } });
+const keyFull = (await AD('list', null, { method: 'GET' })).body.subscriptions.find(s => s.id === id).proofs.slice(-1)[0].key;
+const oldEnd = (await S('status', { id, token })).body.end;
+r = await AD('approve', { id, key: keyFull });
+const afterFull = await S('status', { id, token });
+t('renewing a full month starts a new month now, with 0 of 20 used', afterFull.body.usage.used === 0 && afterFull.body.end > oldEnd && Date.parse(afterFull.body.end) - Date.now() < 32 * 864e5 && JSON.parse(mem.subs.get(id)).periods.length === 2);
+// put the record back as it was so the later tests (early renewal, expiry) run on the first month
+{ const raw = JSON.parse(mem.subs.get(id)); raw.periods.pop(); raw.end = oldEnd; raw.periods[0].used = 0; raw.proofs.pop(); mem.subs.set(id, JSON.stringify(raw)); }
 
 // reminder window: 3 days before the end
 const rec = JSON.parse(mem.subs.get(id));

@@ -111,7 +111,7 @@ function subHTML(s) {
   if (s.status === 'active' && s.daysLeft <= data.plan.remindDays && !s.cancelAtEnd) links.push(`<a class="btn sm" href="${esc(wa(s, 'remind'))}" target="_blank" rel="noopener">Send renewal reminder on WhatsApp</a>`);
   if (p && p.state === 'approved' && s.status === 'active') links.push(`<a class="btn q sm" href="${esc(wa(s, 'approved'))}" target="_blank" rel="noopener">WhatsApp: payment verified</a>`);
   if (p && p.state === 'rejected') links.push(`<a class="btn q sm" href="${esc(wa(s, 'rejected'))}" target="_blank" rel="noopener">WhatsApp: payment not found</a>`);
-  return `<section class="card sub"><div class="who"><div><h2>${esc(s.name)}</h2><div class="meta"><span class="num">${esc(s.id)}</span><span>+${esc(s.phone)}</span>${s.email ? `<span>${esc(s.email)}</span>` : ''}<span>Joined ${fmt(s.createdAt)}</span>${s.end ? `<span>${s.status === 'active' ? 'Paid until' : 'Ended'} ${fmt(s.end)}</span>` : ''}<span>${s.periods.length} month${s.periods.length === 1 ? '' : 's'} paid</span></div></div>${chip(s)}</div>
+  return `<section class="card sub"><div class="who"><div><h2>${esc(s.name)}</h2><div class="meta"><span class="num">${esc(s.id)}</span><span>+${esc(s.phone)}</span>${s.email ? `<span>${esc(s.email)}</span>` : ''}<span>Joined ${fmt(s.createdAt)}</span>${s.end ? `<span>${s.status === 'active' ? 'Paid until' : 'Ended'} ${fmt(s.end)}</span>` : ''}<span>${s.periods.length} month${s.periods.length === 1 ? '' : 's'} paid</span>${s.usage ? `<span>${s.usage.used}/${s.usage.limit} uploads this month${s.usage.limitReached ? ' (all used)' : s.usage.warn ? ' (80%+)' : ''}</span>` : ''}</div></div>${chip(s)}</div>
    ${p ? proofHTML(s, p) : '<p class="small muted">No receipt uploaded yet.</p>'}
    ${links.length ? `<div class="row">${links.join('')}</div>` : ''}</section>`;
 }
@@ -127,7 +127,7 @@ function render() {
   const g = groups(), list = g[filter];
   const P = data.plan;
   const tab = (id, label) => `<button data-act="filter" data-arg="${id}" aria-pressed="${filter === id}">${label} (${g[id].length})</button>`;
-  root.innerHTML = `<div class="bar"><div><h1 style="font-size:1.6rem">Ledger Plus admin</h1><p class="tiny">${naira(P.priceNaira)}/month · ${esc(P.accountName)} · ${esc(P.bank)} ${esc(P.accountNumber)} · ${P.freeUploads} free uploads · reminders ${P.remindDays} days before the end</p></div>
+  root.innerHTML = `<div class="bar"><div><h1 style="font-size:1.6rem">Ledger Plus admin</h1><p class="tiny">${naira(P.priceNaira)}/month · ${esc(P.accountName)} · ${esc(P.bank)} ${esc(P.accountNumber)} · ${P.freeUploads} free uploads · ${P.monthlyUploads} per paid month · reminders ${P.remindDays} days before the end</p></div>
     <div class="row"><button class="btn q sm" data-act="reload">Refresh</button><button class="btn q sm" data-act="logout">Sign out</button></div></div>
    ${msg ? `<div class="status err">${esc(msg)}</div>` : ''}
    <div class="filters" role="group" aria-label="Show">${tab('review', 'Needs review')}${tab('expiring', 'Ending in 3 days')}${tab('active', 'Active')}${tab('all', 'Everyone')}</div>

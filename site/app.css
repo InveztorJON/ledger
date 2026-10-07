@@ -324,3 +324,9 @@ details summary{cursor:pointer;font-weight:700;min-height:40px;display:flex;alig
 .checkrow input{width:20px;height:20px;margin-top:2px;flex:none;accent-color:var(--green)}
 #planSheet .x{justify-self:end;align-self:flex-end;width:auto;margin:-6px -6px 0 0}
 #planSheet h2{margin-top:-8px}
+
+.usage{display:grid;gap:8px;margin-top:10px}
+.usage .head{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.xp.warn i{background:var(--amber,#B7791F)}
+.xp.bad i{background:var(--red,#C0392B)}
+.xp.info i{background:var(--green)}
