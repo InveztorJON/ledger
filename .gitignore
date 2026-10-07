@@ -1,3 +1,5 @@
 .netlify
 node_modules
 .env
+
+/pwa_me.png
