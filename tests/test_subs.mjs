@@ -19,6 +19,8 @@ const logs = []; console.error = (...a) => logs.push(a.join(' '));
 process.env.URL = 'https://ledger.example';
 process.env.ADMIN_KEY = 'correct-horse-battery';
 process.env.ANTHROPIC_API_KEY = 'k';
+process.env.MAIL_USER = 'ledger@example.com'; process.env.MAIL_PASS = 'x';
+const outbox = []; globalThis.__LEDGER_MAIL__ = async m => { outbox.push(m); };
 
 const { default: sub } = await import(path.join(root, 'netlify/functions/sub.mjs'));
 const { default: admin } = await import(path.join(root, 'netlify/functions/admin.mjs'));
@@ -53,15 +55,15 @@ t('phone numbers normalise', plan.normPhone('0803 123 4567') === '2348031234567'
 t('one month: 31 Jan → 28 Feb, 15 Mar → 15 Apr', plan.addMonth('2027-01-31T10:00:00.000Z').startsWith('2027-02-28') && plan.addMonth('2026-03-15T08:00:00.000Z').startsWith('2026-04-15'));
 
 // start
-let r = await S('start', { name: 'Ada Obi', phone: '08031234567', agree: true });
+let r = await S('start', { name: 'Ada Obi', phone: '08031234567', agree: true, email: 'ada@example.com' });
 t('start creates a subscription with a code and token', r.status === 200 && /^LDG-[2-9A-HJ-NP-Z]{6}$/.test(r.body.id) && r.body.token && r.body.status === 'unpaid', JSON.stringify(r.body));
 const { id, token } = r.body;
 t('start returns the bank details', r.body.plan.accountNumber === '1029821937' && r.body.plan.accountName === 'JONSPIRE LIMITED' && r.body.plan.priceNaira === 10000);
 t('token is stored only as a hash', !mem.subs.get(id).includes(token));
 t('start needs agreement', (await S('start', { name: 'Ada Obi', phone: '08031234567' })).status === 400);
-t('start rejects a bad phone', (await S('start', { name: 'Ada Obi', phone: '123', agree: true })).status === 400);
-t('start rejects other websites', (await S('start', { name: 'Ada Obi', phone: '08031234567', agree: true }, { origin: 'https://evil.example' })).status === 403);
-t('name is cleaned of markup', (await S('start', { name: '<b>Ada</b> Obi', phone: '08031234567', agree: true })).body.name === 'b Ada /b Obi');
+t('start rejects a bad phone', (await S('start', { name: 'Ada Obi', phone: '123', agree: true, email: 'ada@example.com' })).status === 400);
+t('start rejects other websites', (await S('start', { name: 'Ada Obi', phone: '08031234567', agree: true, email: 'ada@example.com' }, { origin: 'https://evil.example' })).status === 403);
+t('name is cleaned of markup', (await S('start', { name: '<b>Ada</b> Obi', phone: '08031234567', agree: true, email: 'ada@example.com' })).body.name === 'b Ada /b Obi');
 
 // auth
 t('status needs the right token', (await S('status', { id, token: 'nope' })).status === 401 && (await S('status', { id, token })).status === 200);
@@ -133,7 +135,7 @@ t('20th upload is allowed and fills the month', u.status === 200 && u.body.usage
 u = await S('use', { id, token });
 t('21st upload is refused with the month full', u.status === 402 && u.body.usage.used === 20 && u.body.usage.limitReached === true);
 t('use needs the right token', (await S('use', { id, token: 'nope' })).status === 401);
-t('use is refused when there is no active plan', (await S('use', { id: (await S('start', { name: 'Free Person', phone: '08039999999', agree: true })).body.id, token: 'x' })).status === 401);
+t('use is refused when there is no active plan', (await S('use', { id: (await S('start', { name: 'Free Person', phone: '08039999999', agree: true, email: 'ada@example.com' })).body.id, token: 'x' })).status === 401);
 // renewing when all 20 are used starts a new month now with a fresh allowance
 await S('proof', { id, token, file: { type: 'image/png', data: png } });
 const keyFull = (await AD('list', null, { method: 'GET' })).body.subscriptions.find(s => s.id === id).proofs.slice(-1)[0].key;
@@ -172,6 +174,45 @@ t('restore is rate-limited', (await S('restore', { id, phone: '08031234567' }, {
 
 // big file
 t('proof over 3.5 MB is refused', (await S('proof', { id, token, file: { type: 'image/png', data: Buffer.concat([Buffer.from([0x89, 0x50, 0x4E, 0x47]), Buffer.alloc(3.7 * 1024 * 1024)]).toString('base64') } })).status === 413);
+
+
+// ---- email ----
+const to = (subj) => outbox.filter(m => m.subject.includes(subj));
+t('email is required to start a subscription', (await S('start', { name: 'No Mail', phone: '08031112222', agree: true })).status === 400);
+t('an email with injected headers is refused', (await S('start', { name: 'Bad Mail', phone: '08031112223', agree: true, email: 'a@b.com\r\nBcc: x@y.com' })).status === 400);
+t('receipt-received email goes to the subscriber', to('We got your Ledger Plus payment receipt').some(m => m.to === 'ada@example.com' && m.text.includes('LDG-')));
+t('the admin is told when a proof arrives', to('New Ledger Plus payment to review').some(m => m.to === 'ledger@example.com' && m.text.includes('/admin.html')));
+t('approval email says when Ledger Plus runs until', to('Ledger Plus is active').some(m => m.to === 'ada@example.com' && /20 statement uploads/.test(m.text)));
+t('rejection email gives the reason and the bank details', to("We couldn't verify").some(m => m.text.includes('No ₦10,000') && m.text.includes('1029821937')));
+t('one warning email at 16 of 20, with the renewal price', to('16 of 20 uploads used').length === 1 && to('16 of 20 uploads used')[0].text.includes('₦10,000'));
+t('one "all uploads used" email at 20 of 20', to('all uploads used').length === 1);
+t('no email ever carries the subscriber token', outbox.every(m => !m.text.includes(token)));
+t('every email is from the Ledger sender and replies work', outbox.every(m => m.from.includes('ledger@example.com') && m.replyTo));
+
+// daily reminder job
+const { runReminders } = await import(path.join(root, 'netlify/functions/remind.mjs'));
+{
+  const now = Date.now();
+  const mk = (id, end, extra = {}) => { const r = { id, name: 'Test User', phone: '2348030000000', email: id.toLowerCase() + '@example.com', end: new Date(end).toISOString(), cancelAtEnd: false, periods: [{ start: new Date(end - 30 * 864e5).toISOString(), end: new Date(end).toISOString(), used: 3 }], proofs: [], tokens: [], ...extra }; mem.subs.set(id, JSON.stringify(r)); };
+  mk('LDG-REMIN1', now + 2.5 * 864e5);                       // due: gets one reminder
+  mk('LDG-REMIN2', now + 10 * 864e5);                        // not due
+  mk('LDG-REMIN3', now + 2 * 864e5, { cancelAtEnd: true });  // chose not to renew
+  mk('LDG-REMIN4', now + 2 * 864e5, { email: '' });          // no email on file
+  const before = outbox.length;
+  let out = await runReminders(now);
+  const sent = outbox.slice(before);
+  t('daily job emails only the subscriber whose month ends in 3 days', sent.length === 1 && sent[0].to === 'ldg-remin1@example.com' && out.sent === 1, JSON.stringify(out));
+  t('the reminder says the date, price, account and code', /₦10,000/.test(sent[0].text) && sent[0].text.includes('1029821937') && sent[0].text.includes('LDG-REMIN1') && /3 days/.test(sent[0].subject));
+  out = await runReminders(now + 3600e3);
+  t('running the job again does not send a second reminder', out.sent === 0);
+  const savedUser = process.env.MAIL_USER; delete process.env.MAIL_USER; const saved = globalThis.__LEDGER_MAIL__; delete globalThis.__LEDGER_MAIL__;
+  out = await runReminders(now);
+  t('without email set up the job does nothing and does not fail', out.sent === 0 && out.skipped);
+  process.env.MAIL_USER = savedUser; globalThis.__LEDGER_MAIL__ = saved;
+  globalThis.__LEDGER_MAIL__ = async () => { throw new Error('smtp down'); };
+  t('a mail server failure never breaks a subscription request', (await S('start', { name: 'Still Works', phone: '08034445555', agree: true, email: 'sw@example.com' })).status === 200);
+  globalThis.__LEDGER_MAIL__ = saved;
+}
 
 const pass = results.filter(Boolean).length;
 console.log(`${pass}/${results.length} passed`);

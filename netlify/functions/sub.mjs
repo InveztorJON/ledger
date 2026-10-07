@@ -9,8 +9,10 @@
 // Privacy: request bodies are never logged.
 
 import { json, allowedOrigin, clientIp, limit, readJson } from '../lib/http.mjs';
-import { PLAN, newId, newToken, sha256, normPhone, cleanText, validId, publicView, applyUse } from '../lib/plan.mjs';
+import { PLAN, newId, newToken, sha256, normPhone, cleanText, validId, publicView, applyUse, usageOf, warnCount } from '../lib/plan.mjs';
 import { stores } from '../lib/store.mjs';
+import { sendMail, validEmail, adminAddress } from '../lib/mail.mjs';
+import * as mail from '../lib/emails.mjs';
 
 const MAX_PROOF = 3.5 * 1024 * 1024;
 const TYPES = {
@@ -47,7 +49,7 @@ export default async (req, context) => {
       const name = cleanText(body.name, 80), phone = normPhone(body.phone), email = cleanText(body.email, 120);
       if (name.length < 3) return json(400, { error: 'Enter your full name as it appears on your bank account.' });
       if (!phone) return json(400, { error: 'Enter a Nigerian phone number, like 0803 123 4567.' });
-      if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return json(400, { error: 'That email address looks incomplete.' });
+      if (!validEmail(email)) return json(400, { error: 'Enter a valid email address. We send your receipt confirmation and renewal reminders there.' });
       if (body.agree !== true) return json(400, { error: 'Please agree to the terms and privacy policy.' });
       let id; for (let i = 0; i < 5; i++) { id = newId(); if (!(await st.getSub(id))) break; }
       const token = newToken();
@@ -77,7 +79,12 @@ export default async (req, context) => {
     if (action === 'use') {
       if (!(rec.end && Date.parse(rec.end) > Date.now())) return json(402, { error: 'Ledger Plus is not active.', ...publicView(rec) });
       const ok = applyUse(rec);
-      if (ok) await st.putSub(rec);
+      if (ok) {
+        await st.putSub(rec);
+        const u = usageOf(rec);   // emails go out exactly once: when the count first reaches 80% and when it reaches the full allowance
+        if (u.used === warnCount()) await sendMail(mail.usageWarn(rec, u.used, u.limit));
+        else if (u.limitReached) await sendMail(mail.usageFull(rec, u.limit));
+      }
       return json(ok ? 200 : 402, ok ? publicView(rec) : { error: "You've used all your statement uploads for this month.", ...publicView(rec) });
     }
 
@@ -104,6 +111,8 @@ export default async (req, context) => {
       rec.proofs = rec.proofs.slice(-24);
       rec.cancelAtEnd = false;
       await st.putSub(rec);
+      await sendMail(mail.receiptReceived(rec));
+      if (adminAddress()) await sendMail(mail.adminNewProof(rec, adminAddress()));
       return json(200, publicView(rec));
     }
 

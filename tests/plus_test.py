@@ -73,7 +73,7 @@ async def main():
         await pg.click('#planSheet button[type=submit]')
         await pg.wait_for_timeout(200)
         rec('Needs the agreement tick', 'agree' in (await pg.inner_text('#planSheet')).lower() and await pg.evaluate('!P.id'))
-        await pg.fill('#plName', 'Ada Obi'); await pg.fill('#plPhone', '0803 123 4567'); await pg.check('#plAgree')
+        await pg.fill('#plName', 'Ada Obi'); await pg.fill('#plPhone', '0803 123 4567'); await pg.fill('#plEmail', 'ada@example.com'); await pg.check('#plAgree')
         await pg.click('#planSheet button[type=submit]')
         await pg.wait_for_selector('#planSheet .paybox', timeout=5000)
         t = await pg.inner_text('#planSheet')

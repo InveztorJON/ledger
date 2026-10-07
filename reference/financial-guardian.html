@@ -544,8 +544,8 @@ function planHTML(reason){
     <p class="small muted">Step 1 of 3. Tell us who's paying so we can match your transfer.</p>
     <label class="f" for="plName">Full name, as on your bank account<input type="text" id="plName" autocomplete="name" maxlength="80" required value="${esc(planDraft.name)}"></label>
     <label class="f" for="plPhone">Phone number (WhatsApp if you have it)<input type="tel" id="plPhone" autocomplete="tel" inputmode="tel" placeholder="0803 123 4567" required value="${esc(planDraft.phone)}"></label>
-    <label class="f" for="plEmail">Email (optional)<input type="email" id="plEmail" autocomplete="email" maxlength="120" value="${esc(planDraft.email)}"></label>
-    <label class="checkrow" for="plAgree"><input type="checkbox" id="plAgree"><span>I agree to the <a href="terms.html" target="_blank" rel="noopener">terms</a> and <a href="privacy.html" target="_blank" rel="noopener">privacy policy</a>, including Ledger keeping my name, phone number and payment receipt to verify my subscription.</span></label>
+    <label class="f" for="plEmail">Email, for your receipt confirmation and renewal reminders<input type="email" id="plEmail" autocomplete="email" inputmode="email" maxlength="120" required value="${esc(planDraft.email)}"></label>
+    <label class="checkrow" for="plAgree"><input type="checkbox" id="plAgree"><span>I agree to the <a href="terms.html" target="_blank" rel="noopener">terms</a> and <a href="privacy.html" target="_blank" rel="noopener">privacy policy</a>, including Ledger keeping my name, phone number, email and payment receipt to verify my subscription.</span></label>
     ${err}${busy}
     <button class="btn" type="submit" ${planBusy?'disabled':''}>Continue</button>
    </form>

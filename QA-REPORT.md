@@ -83,3 +83,5 @@ Still to check by hand: one real transfer and approval on the live site, the AI 
 ## Hardening and Excel — 7 October 2026
 
 Content-Security-Policy now allows scripts and connections from Ledger's own site only (plus Google Fonts for styling). pdf.js and SheetJS are served from `site/vendor/`. Added Cross-Origin-Opener-Policy, Cross-Origin-Resource-Policy, upgrade-insecure-requests and HSTS for subdomains. An Excel (.xlsx) statement is now read in a browser test with no policy errors (tests/xlsx_test.py, 5/5). Offline paid uploads are queued and reported when the phone reconnects (browser test). The free-trial count is also kept in a first-party cookie (browser test). Still not covered: real statements from real banks, a real phone, and a real payment.
+
+Email (7 Oct 2026): 15 new server tests cover each email, the daily reminder job (sends once, skips cancelled, skips no-email, does nothing when email is off) and mail-server failure not breaking requests. A real send through Gmail has not been tested yet; it needs the Gmail app password in Netlify.

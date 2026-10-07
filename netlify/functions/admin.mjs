@@ -9,6 +9,8 @@
 import { json, clientIp, limit, blocked, readJson } from '../lib/http.mjs';
 import { PLAN, safeEqual, validId, publicView, applyApproval, applyRejection, judgeReceipt } from '../lib/plan.mjs';
 import { stores } from '../lib/store.mjs';
+import { sendMail } from '../lib/mail.mjs';
+import * as mail from '../lib/emails.mjs';
 
 const READ_PROMPT = `This file was uploaded as proof of a bank transfer. Read it carefully and reply with one JSON object only, no other text:
 {"is_receipt": true/false (is this a bank transfer receipt or confirmation screen?),
@@ -107,14 +109,17 @@ export default async (req, context) => {
       return json(200, summary(rec));
     }
     if (action === 'approve') {
+      const wasApproved = proof.state === 'approved';
       if (proof.state === 'rejected' || proof.state === 'pending' || proof.state === 'replaced') applyApproval(rec, proof.key);
       await st.putSub(rec);
+      if (!wasApproved) await sendMail(mail.approved(rec, rec.end));
       return json(200, summary(rec));
     }
     if (action === 'reject') {
       if (proof.state === 'approved') return json(400, { error: 'Already approved. A month was granted for this proof.' });
       applyRejection(rec, proof.key, body.reason);
       await st.putSub(rec);
+      await sendMail(mail.rejected(rec, proof.reason));
       return json(200, summary(rec));
     }
     return json(404, { error: 'Unknown action' });
