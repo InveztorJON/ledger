@@ -21,7 +21,7 @@ Ledger is a product of Jonspire Limited (RC 9187600), Lagos, Nigeria.
 - `site/` is the app people use. **This folder is the source of truth; edit it directly.**
   - `index.html` holds the page layout, `app.js` the app logic (statement reading, insights, habits, coach), and `app.css` the styles.
   - `sw.js` is offline support. **Change `VERSION` on line 2 whenever you change app.js, app.css or index.html.** Otherwise installed apps keep the old copy.
-  - `privacy.html` and `terms.html` are the legal pages. `vendor/` holds pdf.js 3.11.174.
+  - `privacy.html` and `terms.html` are the legal pages. `vendor/` holds pdf.js 3.11.174 and SheetJS 0.18.5 (Excel), both served by Ledger itself, so the security policy allows scripts from our own site only.
 - `netlify/functions/sub.mjs` is the Ledger Plus service at `/api/sub/*` (start, status, proof, cancel, resume, restore).
 - `netlify/functions/admin.mjs` is the admin service at `/api/admin/*` (list, proof, AI check, approve, reject). It needs `ADMIN_KEY`.
 - `netlify/lib/plan.mjs` holds the plan settings (price, free uploads, monthly cap, warning level, bank account, reminder days) and the subscription rules. **If you change the price or account, change it here and in `window.LEDGER_PLAN` at the top of `site/app.js`, plus `site/terms.html`.** A test fails if the two code copies disagree.
@@ -32,7 +32,8 @@ Ledger is a product of Jonspire Limited (RC 9187600), Lagos, Nigeria.
 - `tests/` holds the test tools:
   - `node tests/test_coach.mjs netlify/functions/coach.mjs` runs the coach unit tests (18). The Anthropic API is mocked.
   - `node tests/test_subs.mjs` runs the Ledger Plus server tests (51) with in-memory storage.
-  - `python tests/plus_test.py http://127.0.0.1:8899` runs the full free-trial → pay → verify → reminder → restore flow in a browser (47). Start `tests/serve.mjs` first; its admin password is `test-admin-key-123`.
+  - `python tests/plus_test.py http://127.0.0.1:8899` runs the full free-trial → pay → verify → reminder → restore flow in a browser (51). Start `tests/serve.mjs` first; its admin password is `test-admin-key-123`.
+  - `python tests/xlsx_test.py http://127.0.0.1:8899` checks that an Excel (.xlsx) statement is read, using the Excel reader hosted in `site/vendor/` (5 checks).
   - `node tests/serve.mjs site 8899` runs a local copy with a mocked coach.
   - `python tests/pwa_test.py http://127.0.0.1:8899` runs the install and offline checks. It needs Playwright.
 - `reference/financial-guardian.html` is the single-file version used for the Claude preview. Rebuild it from `site/` with `python tools/make_viewer.py` after changing the app.
@@ -47,7 +48,7 @@ Ledger is a product of Jonspire Limited (RC 9187600), Lagos, Nigeria.
 5. If the money isn't there, press **Reject** and choose a reason. The person sees it in the app and can upload again.
 6. **Ending in 3 days** lists people whose month ends soon. They already see a "Renew or cancel" banner in the app; the WhatsApp button sends a reminder too.
 
-Limits to know: the free-trial count lives on the phone, so someone who clears their browser data or uses a new browser gets 2 more free uploads. Closing that gap needs sign-in (for example email or phone codes), which is a bigger change. Reminders reach people when they open the app (and as a phone notification if they allowed it); email or SMS reminders need an email/SMS provider.
+Limits to know: the free-trial count lives on the phone (in local storage and a small cookie), so someone who clears all their browser data or uses a new browser gets 2 more free uploads. Closing that gap needs sign-in (for example email or phone codes), which is a bigger change. Reminders reach people when they open the app (and as a phone notification if they allowed it); email or SMS reminders need an email/SMS provider.
 
 ## Continuing with Claude
 
@@ -63,6 +64,7 @@ Open a new chat and attach this folder, or give it the GitHub repo `InveztorJON/
 
 ## Change log
 
+- 7 Oct 2026 (later): Security headers tightened (no outside script or connection sources; added COOP, CORP, upgrade-insecure-requests, HSTS subdomains). Excel reader now self-hosted. Offline paid uploads are queued and sent when back online. Free-trial count also kept in a first-party cookie.
 - 7 Oct 2026: Plan change. 2 free uploads (was 5), ₦10,000/month (was ₦1,500), each paid month capped at 20 statement uploads counted on the server, renew-or-cancel prompt at 80% (16 of 20) and at 20 of 20. Renewing a full month starts the new month immediately. Existing ₦1,500 subscribers keep their paid month; renewals cost ₦10,000. Terms and privacy updated.
 - 5 Oct 2026: Ledger Plus. 5 free uploads, ₦1,500/month by bank transfer, proof-of-payment upload, admin verification with AI receipt check, one-month periods, renew/cancel reminder 3 days before the end, restore on another phone. Privacy and terms updated.
 - 29 Sep 2026: first public deploy. Coach switched to Netlify AI Gateway. Legal pages carry the Jonspire Limited CAC details and jonspirelimited@gmail.com.

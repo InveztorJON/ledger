@@ -69,10 +69,17 @@ const PKEY='ledger_plan';
 function loadPlan(){try{const p=JSON.parse(localStorage.getItem(PKEY)||'null');if(p&&typeof p==='object')return p;}catch(e){}return{};}
 let P=loadPlan();
 function savePlan(){try{localStorage.setItem(PKEY,JSON.stringify(P));}catch(e){}}
-if(typeof P.used!=='number'){P.used=S.demo?0:Math.min(S.statements.length,PLAN.freeUploads);savePlan();}
+// The free-trial count is also kept in a small cookie, so clearing only part of the browser data doesn't hand out a fresh trial.
+const TRIAL_COOKIE='ledger_trial';
+function readTrialCookie(){try{const m=document.cookie.match(/(?:^|; )ledger_trial=(\d{1,3})/);return m?+m[1]:0;}catch(e){return 0;}}
+function writeTrialCookie(n){try{document.cookie=`${TRIAL_COOKIE}=${n}; max-age=63072000; path=/; SameSite=Strict${location.protocol==='https:'?'; Secure':''}`;}catch(e){}}
+if(typeof P.used!=='number'){P.used=S.demo?0:Math.min(S.statements.length,PLAN.freeUploads);}
+if(!IN_VIEWER&&readTrialCookie()>P.used)P.used=Math.min(readTrialCookie(),PLAN.freeUploads);
+if(!IN_VIEWER)writeTrialCookie(P.used);
+savePlan();
 const planActive=()=>!!(P.sub&&P.sub.end&&Date.parse(P.sub.end)>Date.now());
 const monthLimit=()=>PLAN.monthlyUploads;
-const monthUsed=()=>planActive()?Math.min(monthLimit(),(P.sub&&P.sub.usage&&P.sub.usage.used)||0):0;
+const monthUsed=()=>planActive()?Math.min(monthLimit(),((P.sub&&P.sub.usage&&P.sub.usage.used)||0)+(P.pendingUse||0)):0;   // server count plus uploads not yet reported
 const monthLeft=()=>monthLimit()-monthUsed();
 const monthFull=()=>planActive()&&monthUsed()>=monthLimit();
 const warnAtCount=()=>Math.ceil(monthLimit()*PLAN.warnAt);
@@ -101,6 +108,7 @@ function takeSub(d){
 }
 async function refreshPlan(){
   if(IN_VIEWER||!P.id||!P.token)return;
+  try{await flushUse();}catch(e){}
   try{takeSub(await subApi('status',{id:P.id,token:P.token}));}catch(e){}
   if($('#planSheet'))openPlan();else render();
   maybeNotify();
@@ -114,16 +122,34 @@ function gateUpload(then){
 // and the app keeps its own tally in step so the meter is right even offline.
 function countUpload(){
   if(planActive()){
-    const u=P.sub.usage||{used:0,limit:monthLimit()};u.used=Math.min(monthLimit(),(u.used||0)+1);P.sub.usage=u;savePlan();
-    if(!IN_VIEWER&&P.id&&P.token)subApi('use',{id:P.id,token:P.token}).then(takeSub,e=>{if(e&&e.status===402&&e.data)takeSub(e.data);}).finally(()=>{usageNudge();render();});
+    P.pendingUse=(P.pendingUse||0)+1;savePlan();
+    if(!IN_VIEWER&&P.id&&P.token)flushUse().finally(()=>{usageNudge();render();});
     else usageNudge();
     return;
   }
-  P.used=(P.used||0)+1;savePlan();
+  P.used=(P.used||0)+1;savePlan();if(!IN_VIEWER)writeTrialCookie(P.used);
   const left=freeLeft();
   if(left>0)toast(`${left} free statement upload${left===1?'':'s'} left`);
   else setTimeout(()=>openPlan('limit'),900);
 }
+// Reports uploads to the server one at a time. Uploads made offline wait here and are sent as soon as the phone is online again.
+let flushing=null;
+function flushUse(){
+  if(flushing)return flushing;
+  flushing=(async()=>{
+    while((P.pendingUse||0)>0){
+      try{const d=await subApi('use',{id:P.id,token:P.token});P.pendingUse=Math.max(0,(P.pendingUse||0)-1);takeSub(d);}
+      catch(e){
+        if(e&&e.status===402){P.pendingUse=0;if(e.data)takeSub(e.data);savePlan();}   // the month is full on the server: the server's count wins
+        else if(e&&e.status===401){P.pendingUse=0;savePlan();}
+        break;                                                                        // offline or server trouble: keep the rest queued
+      }
+    }
+    savePlan();
+  })().finally(()=>{flushing=null;});
+  return flushing;
+}
+if(!IN_VIEWER)addEventListener('online',()=>{if(P.id&&P.token&&(P.pendingUse||0)>0)flushUse().then(()=>render());});
 // At 80% and at 100% of the month's allowance, ask the person to renew or cancel.
 function usageNudge(){
   if(!planActive())return;
@@ -537,7 +563,7 @@ function textToRows(text){
 const loaded={};
 function loadScript(src){if(loaded[src])return loaded[src];return loaded[src]=new Promise((res,rej)=>{const s=document.createElement('script');s.src=src;s.onload=res;s.onerror=()=>{delete loaded[src];rej(new Error('load'));};document.head.appendChild(s);});}
 const PDFJS=IN_VIEWER?'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/':'vendor/';
-const XLSXJS='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+const XLSXJS=IN_VIEWER?'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js':'vendor/xlsx.full.min.js';
 async function pdfToRows(buf,password){
   await loadScript(PDFJS+'pdf.worker.min.js');await loadScript(PDFJS+'pdf.min.js');
   pdfjsLib.GlobalWorkerOptions.workerSrc=PDFJS+'pdf.worker.min.js';
