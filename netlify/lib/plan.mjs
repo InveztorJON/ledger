@@ -3,7 +3,7 @@
 
 export const PLAN = {
   freeUploads: 2,
-  priceNaira: 10000,
+  priceNaira: 6000,
   monthlyUploads: 20,   // statement uploads allowed in each paid month
   warnAt: 0.8,          // warn (and ask renew or cancel) when this share is used
   bank: 'UBA',

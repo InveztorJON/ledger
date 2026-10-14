@@ -350,7 +350,7 @@ details summary{cursor:pointer;font-weight:700;min-height:40px;display:flex;alig
 /* ===== Ledger settings: edit before launch ===== */
 window.LEDGER_CONTACT_EMAIL = 'jonspirelimited@gmail.com';   // shown in the app for questions and feedback
 // Ledger Plus: free trial and subscription. Keep in sync with netlify/lib/plan.mjs (tests check this).
-window.LEDGER_PLAN = {freeUploads: 2, priceNaira: 10000, monthlyUploads: 20, warnAt: 0.8, bank: 'UBA', accountName: 'JONSPIRE LIMITED', accountNumber: '1029821937', remindDays: 3, appUrl: 'https://jonspire-ledger.netlify.app'};
+window.LEDGER_PLAN = {freeUploads: 2, priceNaira: 6000, monthlyUploads: 20, warnAt: 0.8, bank: 'UBA', accountName: 'JONSPIRE LIMITED', accountNumber: '1029821937', remindDays: 3, appUrl: 'https://jonspire-ledger.netlify.app'};
 /* ================================================= */
 'use strict';
 /* ================= utilities ================= */
@@ -413,7 +413,7 @@ let chat=[], chatBusy=false, liveText='', chatCtl=null, chatDraft='', sampleFn=n
 let ciDraft={};
 
 /* ================= Ledger Plus: free trial and subscription ================= */
-const PLAN=Object.assign({freeUploads:2,priceNaira:10000,monthlyUploads:20,warnAt:0.8,bank:'UBA',accountName:'JONSPIRE LIMITED',accountNumber:'1029821937',remindDays:3,appUrl:''},window.LEDGER_PLAN||{});
+const PLAN=Object.assign({freeUploads:2,priceNaira:6000,monthlyUploads:20,warnAt:0.8,bank:'UBA',accountName:'JONSPIRE LIMITED',accountNumber:'1029821937',remindDays:3,appUrl:''},window.LEDGER_PLAN||{});
 const PKEY='ledger_plan';
 function loadPlan(){try{const p=JSON.parse(localStorage.getItem(PKEY)||'null');if(p&&typeof p==='object')return p;}catch(e){}return{};}
 let P=loadPlan();

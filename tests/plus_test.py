@@ -60,7 +60,7 @@ async def main():
         await pg.click('.drop')
         await pg.wait_for_selector('#planSheet')
         t = await pg.inner_text('#planSheet')
-        rec('3rd upload opens the subscription sheet', "used your 2 free statement uploads" in t and '₦10,000' in t, t[:200])
+        rec('3rd upload opens the subscription sheet', "used your 2 free statement uploads" in t and '₦6,000' in t, t[:200])
                 # sneaking a file in directly is still blocked
         await pg.evaluate('closeSheet()')
         await pg.set_input_files('#fileIn', statement(6))
@@ -78,8 +78,8 @@ async def main():
         await pg.wait_for_selector('#planSheet .paybox', timeout=5000)
         t = await pg.inner_text('#planSheet')
         code = await pg.evaluate('P.id')
-        rec('Pay step shows JONSPIRE LIMITED, UBA, 1029821937, ₦10,000 and the reference code',
-            'JONSPIRE LIMITED' in t and 'UBA' in t and '1029821937' in t and '₦10,000' in t and code and code in t, t)
+        rec('Pay step shows JONSPIRE LIMITED, UBA, 1029821937, ₦6,000 and the reference code',
+            'JONSPIRE LIMITED' in t and 'UBA' in t and '1029821937' in t and '₦6,000' in t and code and code in t, t)
         if SHOTS: await pg.screenshot(path=f'{SHOTS}/pay.png', full_page=False)
         rec('Token saved on the device, not shown', bool(await pg.evaluate('P.token')) and (await pg.evaluate('P.token')) not in t)
 
@@ -140,7 +140,7 @@ async def main():
         rec('Admin lists them under "Ending in 3 days" with a WhatsApp reminder', 'Ending in 3 days (1)' in await ad.inner_text('#root'))
         await ad.click('[data-act="filter"][data-arg="expiring"]')
         href = await ad.get_attribute('a:has-text("renewal reminder")', 'href')
-        rec('WhatsApp reminder has the date, price, account and code', href and '1029821937' in href and code in href and '%E2%82%A610%2C000' in href, href)
+        rec('WhatsApp reminder has the date, price, account and code', href and '1029821937' in href and code in href and '%E2%82%A66%2C000' in href, href)
         await bn.locator('[data-act="plan-cancel-open"]').click()
         await pg.click('#planSheet [data-act="plan-cancel"]')
         await until(pg, 'P.sub.cancelAtEnd===true', 5000)
@@ -237,7 +237,7 @@ async def main():
         rec('A 21st statement is not read', await pg.evaluate('S.statements.length') == 5)
         rec('The full-month sheet opens when trying to upload', await pg.locator('#planSheet').count() == 1)
         await pg.evaluate("openPlan('full');planView='pay';openPlan()")
-        rec('Renew screen says the new month starts straight away', 'as soon as your payment is verified' in await pg.inner_text('#planSheet') and '₦10,000' in await pg.inner_text('#planSheet'))
+        rec('Renew screen says the new month starts straight away', 'as soon as your payment is verified' in await pg.inner_text('#planSheet') and '₦6,000' in await pg.inner_text('#planSheet'))
         await pg.evaluate("closeSheet()")
         # --- free-trial count survives clearing local storage only ---
         ctx3 = await b.new_context(viewport={'width': 360, 'height': 780})

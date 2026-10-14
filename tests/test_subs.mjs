@@ -47,8 +47,8 @@ const appPlan = m ? Function('return ' + m[1])() : {};
 t('app and server agree on price, free uploads and bank account',
   appPlan.freeUploads === plan.PLAN.freeUploads && appPlan.priceNaira === plan.PLAN.priceNaira && appPlan.accountNumber === plan.PLAN.accountNumber && appPlan.accountName === plan.PLAN.accountName && appPlan.bank === plan.PLAN.bank && appPlan.remindDays === plan.PLAN.remindDays,
   JSON.stringify(appPlan));
-t('plan is ₦10,000, 2 free uploads, JONSPIRE LIMITED UBA 1029821937, remind 3 days before',
-  plan.PLAN.priceNaira === 10000 && plan.PLAN.freeUploads === 2 && plan.PLAN.accountName === 'JONSPIRE LIMITED' && plan.PLAN.bank === 'UBA' && plan.PLAN.accountNumber === '1029821937' && plan.PLAN.remindDays === 3);
+t('plan is ₦6,000, 2 free uploads, JONSPIRE LIMITED UBA 1029821937, remind 3 days before',
+  plan.PLAN.priceNaira === 6000 && plan.PLAN.freeUploads === 2 && plan.PLAN.accountName === 'JONSPIRE LIMITED' && plan.PLAN.bank === 'UBA' && plan.PLAN.accountNumber === '1029821937' && plan.PLAN.remindDays === 3);
 
 // helpers
 t('phone numbers normalise', plan.normPhone('0803 123 4567') === '2348031234567' && plan.normPhone('+234 803 123 4567') === '2348031234567' && plan.normPhone('12345') === null);
@@ -58,7 +58,7 @@ t('one month: 31 Jan → 28 Feb, 15 Mar → 15 Apr', plan.addMonth('2027-01-31T1
 let r = await S('start', { name: 'Ada Obi', phone: '08031234567', agree: true, email: 'ada@example.com' });
 t('start creates a subscription with a code and token', r.status === 200 && /^LDG-[2-9A-HJ-NP-Z]{6}$/.test(r.body.id) && r.body.token && r.body.status === 'unpaid', JSON.stringify(r.body));
 const { id, token } = r.body;
-t('start returns the bank details', r.body.plan.accountNumber === '1029821937' && r.body.plan.accountName === 'JONSPIRE LIMITED' && r.body.plan.priceNaira === 10000);
+t('start returns the bank details', r.body.plan.accountNumber === '1029821937' && r.body.plan.accountName === 'JONSPIRE LIMITED' && r.body.plan.priceNaira === 6000);
 t('token is stored only as a hash', !mem.subs.get(id).includes(token));
 t('start needs agreement', (await S('start', { name: 'Ada Obi', phone: '08031234567' })).status === 400);
 t('start rejects a bad phone', (await S('start', { name: 'Ada Obi', phone: '123', agree: true, email: 'ada@example.com' })).status === 400);
@@ -93,7 +93,7 @@ t('admin can open the proof file', r.status === 200 && r.ct === 'image/png' && r
 t('admin proof key is validated', (await AD('proof', null, { method: 'GET', qs: '?key=../../etc' })).status === 400);
 
 // AI check
-aiReply = { is_receipt: true, amount_naira: 10000, beneficiary_account: '1029821937', beneficiary_name: 'JONSPIRE LIMITED', beneficiary_bank: 'UBA', date: new Date().toISOString().slice(0, 10), narration: 'Ledger ' + id, sender_name: 'ADA OBI', transaction_status: 'Successful', edits_suspected: false, notes: '' };
+aiReply = { is_receipt: true, amount_naira: 6000, beneficiary_account: '1029821937', beneficiary_name: 'JONSPIRE LIMITED', beneficiary_bank: 'UBA', date: new Date().toISOString().slice(0, 10), narration: 'Ledger ' + id, sender_name: 'ADA OBI', transaction_status: 'Successful', edits_suspected: false, notes: '' };
 r = await AD('check', { id, key });
 let chk = r.body.proofs[0].check;
 t('AI check: matching receipt looks right', r.status === 200 && chk.verdict === 'looks_right' && chk.flags.length === 0, JSON.stringify(chk));
@@ -103,10 +103,10 @@ t('AI check: wrong amount and account are flagged', chk.verdict === 'check_caref
 t('AI check never logs receipt contents', !logs.join(' ').includes('JONSPIRE') && !logs.join(' ').includes('ADA OBI'));
 
 // reject → user sees reason
-r = await AD('reject', { id, key, reason: 'No ₦10,000 credit from Ada Obi found.' });
+r = await AD('reject', { id, key, reason: 'No ₦6,000 credit from Ada Obi found.' });
 t('reject works', r.status === 200 && r.body.proofs[0].state === 'rejected');
 r = await S('status', { id, token });
-t('user sees rejected with the reason', r.body.status === 'rejected' && r.body.rejectedReason.includes('No ₦10,000'));
+t('user sees rejected with the reason', r.body.status === 'rejected' && r.body.rejectedReason.includes('No ₦6,000'));
 
 // new proof + approve → active for one month
 await S('proof', { id, token, file: { type: 'image/png', data: png } });
@@ -183,8 +183,8 @@ t('an email with injected headers is refused', (await S('start', { name: 'Bad Ma
 t('receipt-received email goes to the subscriber', to('We got your Ledger Plus payment receipt').some(m => m.to === 'ada@example.com' && m.text.includes('LDG-')));
 t('the admin is told when a proof arrives', to('New Ledger Plus payment to review').some(m => m.to === 'ledger@example.com' && m.text.includes('/admin.html')));
 t('approval email says when Ledger Plus runs until', to('Ledger Plus is active').some(m => m.to === 'ada@example.com' && /20 statement uploads/.test(m.text)));
-t('rejection email gives the reason and the bank details', to("We couldn't verify").some(m => m.text.includes('No ₦10,000') && m.text.includes('1029821937')));
-t('one warning email at 16 of 20, with the renewal price', to('16 of 20 uploads used').length === 1 && to('16 of 20 uploads used')[0].text.includes('₦10,000'));
+t('rejection email gives the reason and the bank details', to("We couldn't verify").some(m => m.text.includes('No ₦6,000') && m.text.includes('1029821937')));
+t('one warning email at 16 of 20, with the renewal price', to('16 of 20 uploads used').length === 1 && to('16 of 20 uploads used')[0].text.includes('₦6,000'));
 t('one "all uploads used" email at 20 of 20', to('all uploads used').length === 1);
 t('no email ever carries the subscriber token', outbox.every(m => !m.text.includes(token)));
 t('every email is from the Ledger sender and replies work', outbox.every(m => m.from.includes('ledger@example.com') && m.replyTo));
@@ -202,7 +202,7 @@ const { runReminders } = await import(path.join(root, 'netlify/functions/remind.
   let out = await runReminders(now);
   const sent = outbox.slice(before);
   t('daily job emails only the subscriber whose month ends in 3 days', sent.length === 1 && sent[0].to === 'ldg-remin1@example.com' && out.sent === 1, JSON.stringify(out));
-  t('the reminder says the date, price, account and code', /₦10,000/.test(sent[0].text) && sent[0].text.includes('1029821937') && sent[0].text.includes('LDG-REMIN1') && /3 days/.test(sent[0].subject));
+  t('the reminder says the date, price, account and code', /₦6,000/.test(sent[0].text) && sent[0].text.includes('1029821937') && sent[0].text.includes('LDG-REMIN1') && /3 days/.test(sent[0].subject));
   out = await runReminders(now + 3600e3);
   t('running the job again does not send a second reminder', out.sent === 0);
   const savedUser = process.env.MAIL_USER; delete process.env.MAIL_USER; const saved = globalThis.__LEDGER_MAIL__; delete globalThis.__LEDGER_MAIL__;

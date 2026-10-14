@@ -25,7 +25,7 @@ globalThis.fetch = async (url, init) => {
     const q = body.messages[body.messages.length - 1].content;
     if (Array.isArray(q)) {   // receipt check
       const ids = [...mem.subs.keys()]; const id = ids[ids.length - 1];
-      const read = { is_receipt: true, amount_naira: 10000, beneficiary_account: '1029821937', beneficiary_name: 'JONSPIRE LIMITED', beneficiary_bank: 'UBA', date: new Date().toISOString().slice(0, 10), narration: 'Ledger ' + id, sender_name: 'ADA OBI', transaction_status: 'Successful', edits_suspected: false, notes: '' };
+      const read = { is_receipt: true, amount_naira: 6000, beneficiary_account: '1029821937', beneficiary_name: 'JONSPIRE LIMITED', beneficiary_bank: 'UBA', date: new Date().toISOString().slice(0, 10), narration: 'Ledger ' + id, sender_name: 'ADA OBI', transaction_status: 'Successful', edits_suspected: false, notes: '' };
       return new Response(JSON.stringify({ content: [{ type: 'text', text: JSON.stringify(read) }] }), { status: 200 });
     }
     return new Response(JSON.stringify({ content: [{ type: 'text', text: `Mock coach answer to: ${q}` }] }), { status: 200 });

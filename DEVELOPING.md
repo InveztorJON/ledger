@@ -11,7 +11,7 @@ Ledger is a product of Jonspire Limited (RC 9187600), Lagos, Nigeria.
 | Hosting | Netlify project `jonspire-ledger`, Jonspire team |
 | AI coach | Netlify's built-in AI service (AI Gateway). Usage is billed to Netlify credits. No Anthropic key needed. |
 | Contact email | jonspirelimited@gmail.com (terms, privacy, and `site/app.js` line 2) |
-| Ledger Plus | 2 free statement uploads, then ₦10,000/month (20 uploads per paid month, warning at 80%) by transfer to JONSPIRE LIMITED · UBA · 1029821937 |
+| Ledger Plus | 2 free statement uploads, then ₦6,000/month (20 uploads per paid month, warning at 80%) by transfer to JONSPIRE LIMITED · UBA · 1029821937 |
 | Admin page | https://jonspire-ledger.netlify.app/admin.html (password = `ADMIN_KEY` in Netlify environment variables) |
 
 **Every push to `main` goes live automatically in about a minute.**
@@ -44,7 +44,7 @@ Ledger is a product of Jonspire Limited (RC 9187600), Lagos, Nigeria.
 
 1. Open the admin page each day (or when someone messages you). **Needs review** lists receipts waiting.
 2. Press **Run AI check**. It reads the amount, account, date and reference and flags anything that doesn't match.
-3. Open your UBA account and confirm the ₦10,000 arrived. Receipts can be faked, so never approve on the screenshot alone.
+3. Open your UBA account and confirm the ₦6,000 arrived. Receipts can be faked, so never approve on the screenshot alone.
 4. Press **Approve**. The person's month starts immediately and their app unlocks. Optionally send the WhatsApp confirmation.
 5. If the money isn't there, press **Reject** and choose a reason. The person sees it in the app and can upload again.
 6. **Ending in 3 days** lists people whose month ends soon. They already see a "Renew or cancel" banner in the app; the WhatsApp button sends a reminder too.
@@ -65,6 +65,7 @@ Open a new chat and attach this folder, or give it the GitHub repo `InveztorJON/
 
 ## Change log
 
+- 14 Oct 2026: Price cut. Ledger Plus is now ₦6,000/month (was ₦10,000). Same plan otherwise: 2 free uploads, 20 uploads per paid month, warning at 16. Existing subscribers keep their current paid month; renewals are ₦6,000.
 - 7 Oct 2026 (email): Email for Ledger Plus via Gmail (receipts, approval, rejection, 80% and 100% usage, daily 3-day renewal reminder, admin alert). Email now required to subscribe. Privacy and terms updated.
 - 7 Oct 2026 (later): Security headers tightened (no outside script or connection sources; added COOP, CORP, upgrade-insecure-requests, HSTS subdomains). Excel reader now self-hosted. Offline paid uploads are queued and sent when back online. Free-trial count also kept in a first-party cookie.
 - 7 Oct 2026: Plan change. 2 free uploads (was 5), ₦10,000/month (was ₦1,500), each paid month capped at 20 statement uploads counted on the server, renew-or-cancel prompt at 80% (16 of 20) and at 20 of 20. Renewing a full month starts the new month immediately. Existing ₦1,500 subscribers keep their paid month; renewals cost ₦10,000. Terms and privacy updated.
