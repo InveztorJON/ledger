@@ -128,7 +128,7 @@ function render() {
   const P = data.plan;
   const tab = (id, label) => `<button data-act="filter" data-arg="${id}" aria-pressed="${filter === id}">${label} (${g[id].length})</button>`;
   root.innerHTML = `<div class="bar"><div><h1 style="font-size:1.6rem">Ledger Plus admin</h1><p class="tiny">${naira(P.priceNaira)}/month · ${esc(P.accountName)} · ${esc(P.bank)} ${esc(P.accountNumber)} · ${P.freeUploads} free uploads · ${P.monthlyUploads} per paid month · reminders ${P.remindDays} days before the end</p></div>
-    <div class="row"><button class="btn q sm" data-act="reload">Refresh</button><button class="btn q sm" data-act="logout">Sign out</button></div></div>
+    <div class="row"><button class="btn q sm" data-act="telegram">${busy.telegram ? 'Connecting…' : 'Connect Telegram bot'}</button><button class="btn q sm" data-act="reload">Refresh</button><button class="btn q sm" data-act="logout">Sign out</button></div></div>
    ${msg ? `<div class="status err">${esc(msg)}</div>` : ''}
    <div class="filters" role="group" aria-label="Show">${tab('review', 'Needs review')}${tab('expiring', 'Ending in 3 days')}${tab('active', 'Active')}${tab('all', 'Everyone')}</div>
    ${filter === 'review' && list.length ? '<p class="small muted">The AI check reads each receipt, but receipts can be faked. Approve only after you see the money in the UBA account.</p>' : ''}
@@ -140,6 +140,16 @@ async function act(name, arg) {
   const [id, key] = String(arg || '').split('|');
   if (name === 'filter') { filter = arg; rejecting = confirming = null; render(); loadThumbs(); return; }
   if (name === 'reload') return load();
+  if (name === 'telegram') {
+    if (busy.telegram) return;
+    busy.telegram = 1; render(); loadThumbs();
+    try {
+      const d = await (await api('telegram-setup', { method: 'POST', body: '{}' })).json();
+      alert(`Telegram bot @${d.bot} is connected.` + (d.allowed ? '' : '\n\nNext: message the bot, copy the ID it replies with into TELEGRAM_ALLOWED_IDS in Netlify, and redeploy.') + (d.github ? '' : '\n\nLEDGER_GITHUB_TOKEN is not set yet, so website changes will not start.'));
+    } catch (e) { msg = e.message; }
+    delete busy.telegram; render(); loadThumbs();
+    return;
+  }
   if (name === 'logout') { KEY = ''; try { sessionStorage.removeItem('ledger_admin'); } catch (e) {} data = null; render(); return; }
   if (name === 'confirm') { confirming = arg; rejecting = null; render(); loadThumbs(); return; }
   if (name === 'rejecting') { rejecting = arg; confirming = null; render(); loadThumbs(); return; }

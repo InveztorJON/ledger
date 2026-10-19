@@ -8,6 +8,6 @@
     "nodemailer": "^6.9.14"
   },
   "scripts": {
-    "test": "node tests/test_coach.mjs netlify/functions/coach.mjs && node tests/test_subs.mjs"
+    "test": "node tests/test_coach.mjs netlify/functions/coach.mjs && node tests/test_subs.mjs && node tests/test_telegram.mjs"
   }
 }
