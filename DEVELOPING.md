@@ -11,7 +11,7 @@ Ledger is a product of Jonspire Limited (RC 9187600), Lagos, Nigeria.
 | Hosting | Netlify project `jonspire-ledger`, Jonspire team |
 | AI coach | Netlify's built-in AI service (AI Gateway). Usage is billed to Netlify credits. No Anthropic key needed. |
 | Contact email | jonspirelimited@gmail.com (terms, privacy, and `site/app.js` line 2) |
-| Ledger Plus | 2 free statement uploads, then ₦6,000/month (20 uploads per paid month, warning at 80%) by transfer to JONSPIRE LIMITED · UBA · 1029821937 |
+| Ledger Plus | 7-day free trial (starts at first upload), then ₦9,000/month (20 uploads per paid month, warning at 80%) by transfer to JONSPIRE LIMITED · UBA · 1029821937, or about US$9/month by card through Whop (https://whop.com/checkout/plan_K5cA8QWGAioHD/, 7 days free there too) |
 | Admin page | https://jonspire-ledger.netlify.app/admin.html (password = `ADMIN_KEY` in Netlify environment variables) |
 
 **Every push to `main` goes live automatically in about a minute.**
@@ -24,7 +24,7 @@ Ledger is a product of Jonspire Limited (RC 9187600), Lagos, Nigeria.
   - `privacy.html` and `terms.html` are the legal pages. `vendor/` holds pdf.js 3.11.174 and SheetJS 0.18.5 (Excel), both served by Ledger itself, so the security policy allows scripts from our own site only.
 - `netlify/functions/sub.mjs` is the Ledger Plus service at `/api/sub/*` (start, status, proof, cancel, resume, restore).
 - `netlify/functions/admin.mjs` is the admin service at `/api/admin/*` (list, proof, AI check, approve, reject). It needs `ADMIN_KEY`.
-- `netlify/lib/plan.mjs` holds the plan settings (price, free uploads, monthly cap, warning level, bank account, reminder days) and the subscription rules. **If you change the price or account, change it here and in `window.LEDGER_PLAN` at the top of `site/app.js`, plus `site/terms.html`.** A test fails if the two code copies disagree.
+- `netlify/lib/plan.mjs` holds the plan settings (price, trial days, monthly cap, warning level, bank account, reminder days) and the subscription rules. **If you change the price or account, change it here and in `window.LEDGER_PLAN` at the top of `site/app.js`, plus `site/terms.html`.** A test fails if the two code copies disagree.
 - Subscriptions and receipts are stored in Netlify Blobs (built into Netlify, no setup). `package.json` installs `@netlify/blobs` during Netlify's deploy.
 - `site/admin.html` + `site/admin.js` is your admin page.
 - `netlify/lib/mail.mjs` and `emails.mjs` send Ledger Plus email through a Gmail account (receipt received, approved, rejected, 80% and 100% usage, admin alert on a new receipt). `netlify/functions/remind.mjs` runs every day at 08:00 Lagos time and emails each subscriber once when their month is 3 days from ending. Email turns on when `MAIL_USER` (the Gmail address) and `MAIL_PASS` (a Google app password) are set in Netlify environment variables; without them email is off and nothing else breaks. Optional: `ADMIN_EMAIL` (where new-receipt alerts go; defaults to `MAIL_USER`).
@@ -44,7 +44,7 @@ Ledger is a product of Jonspire Limited (RC 9187600), Lagos, Nigeria.
 
 1. Open the admin page each day (or when someone messages you). **Needs review** lists receipts waiting.
 2. Press **Run AI check**. It reads the amount, account, date and reference and flags anything that doesn't match.
-3. Open your UBA account and confirm the ₦6,000 arrived. Receipts can be faked, so never approve on the screenshot alone.
+3. Open your UBA account and confirm the ₦9,000 arrived (or, for a card payer, that the Whop payment shows in your Whop dashboard under Payments). Receipts can be faked, so never approve on the screenshot alone.
 4. Press **Approve**. The person's month starts immediately and their app unlocks. Optionally send the WhatsApp confirmation.
 5. If the money isn't there, press **Reject** and choose a reason. The person sees it in the app and can upload again.
 6. **Ending in 3 days** lists people whose month ends soon. They already see a "Renew or cancel" banner in the app; the WhatsApp button sends a reminder too.
@@ -65,6 +65,7 @@ Open a new chat and attach this folder, or give it the GitHub repo `InveztorJON/
 
 ## Change log
 
+- 19 Oct 2026: Global release. Ledger now reads statements from the US, Europe and African countries: other date orders (month-first or day-first, picked from the dates), comma or dot decimals, thousands spaces, signed or Debit/Credit columns, multi-language headers (English, French, Spanish, German, Portuguese, Italian, Dutch), card statements with positive purchases, plus OFX/QFX, QIF, MT940 and CAMT.053 files. The currency is detected per statement (symbols, ISO codes, IBAN country, bank names, your locale) and can be changed per statement; Ledger never converts between currencies and analyses one currency at a time. Thresholds scale with the currency; the coach is told the currency. The plan changed to ₦9,000/month with a 7-day free trial (from the first upload) instead of 2 free uploads. Overseas payment: Whop checkout link in the plan sheet; the payer uploads the Whop receipt and you approve after confirming the payment in Whop (no Whop API key or webhook is set up yet).
 - 14 Oct 2026: Price cut. Ledger Plus is now ₦6,000/month (was ₦10,000). Same plan otherwise: 2 free uploads, 20 uploads per paid month, warning at 16. Existing subscribers keep their current paid month; renewals are ₦6,000.
 - 7 Oct 2026 (email): Email for Ledger Plus via Gmail (receipts, approval, rejection, 80% and 100% usage, daily 3-day renewal reminder, admin alert). Email now required to subscribe. Privacy and terms updated.
 - 7 Oct 2026 (later): Security headers tightened (no outside script or connection sources; added COOP, CORP, upgrade-insecure-requests, HSTS subdomains). Excel reader now self-hosted. Offline paid uploads are queued and sent when back online. Free-trial count also kept in a first-party cookie.
