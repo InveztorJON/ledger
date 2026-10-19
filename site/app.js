@@ -210,7 +210,7 @@ function planHTML(reason){
   const intro=reason==='limit'&&!planActive()?`<div class="status ok"><b>Your ${PLAN.trialDays}-day free trial has ended.</b> Everything you've uploaded stays here. To keep going, subscribe to Ledger Plus.</div>`
    :reason==='full'&&planActive()?`<div class="status err" role="alert"><b>You've used all ${monthLimit()} uploads for this month.</b> Renew for ${priceTxt()} to start a new month of ${monthLimit()} uploads right away, or cancel. Your data stays here either way.</div>`
    :reason==='warn'&&planActive()?`<div class="status busy" role="status"><b>${monthUsed()} of ${monthLimit()} uploads used.</b> ${monthLeft()} left this month. Renew now to keep uploading without a break, or cancel if you're done.</div>`:'';
-  const what=`<ul class="evidence"><li>Up to ${PLAN.monthlyUploads} statement uploads each month</li><li>${PLAN.trialDays}-day free trial first. It starts with your first statement</li><li>${priceTxt()} a month by bank transfer in Nigeria, with no automatic charges</li><li>Outside Nigeria? Pay about US$${PLAN.cardPriceUsd} a month by card, bank debit or local method <a href="${esc(PLAN.cardUrl)}" target="_blank" rel="noopener noreferrer">on our secure Whop checkout</a>. Then continue below with your details and upload your Whop receipt as proof. We confirm it in Whop and switch you on</li><li>We remind you ${PLAN.remindDays} days before your month ends, so you can renew or cancel</li></ul>`;
+  const what=`<ul class="evidence"><li>Up to ${PLAN.monthlyUploads} statement uploads each month</li><li>${PLAN.trialDays}-day free trial first. It starts with your first statement</li><li>${priceTxt()} a month by bank transfer in Nigeria, with no automatic charges</li><li>Outside Nigeria? Pay about US$${PLAN.cardPriceUsd} a month by card, bank debit or local method <a href="${esc(PLAN.cardUrl)}" target="_blank" rel="noopener noreferrer">on our secure Whop checkout</a>. Use the same email at checkout as the one you give below. Ledger Plus then switches on by itself within a few minutes of your payment. If it hasn't after 10 minutes, upload your Whop receipt as proof and we'll switch you on</li><li>We remind you ${PLAN.remindDays} days before your month ends, so you can renew or cancel</li></ul>`;
   if(IN_VIEWER)return`<div id="planSheet" class="stack">${head}<h2>Ledger Plus · ${priceTxt()} a month</h2>${intro}${what}${payBox()}<p class="small">To subscribe and upload your proof of payment, open the Ledger app${PLAN.appUrl?`: <a href="${esc(PLAN.appUrl)}" target="_blank" rel="noopener">${esc(PLAN.appUrl.replace(/^https?:\/\//,''))}</a>`:''}.</p></div>`;
   const s=P.sub||{};
   let v=planView;
@@ -964,6 +964,12 @@ const mq=matchMedia('(min-width: 980px)');const isWide=()=>mq.matches;
 function countUps(root){if(reduceMotion())return;root.querySelectorAll('[data-count]').forEach(el=>{const to=+el.dataset.count,fmt=el.dataset.fmt;const t0=performance.now();const f=v=>fmt==='n'?money(v):Math.round(v);(function s(t){const k=Math.min(1,(t-t0)/900),e=1-Math.pow(1-k,3);el.textContent=f(to*e);if(k<1)requestAnimationFrame(s);})(t0);});}
 
 /* ================= render ================= */
+const LANGS=[['en','English'],['fr','Français'],['es','Español'],['pt','Português'],['sw','Kiswahili']];
+const I18N={fr:{'Home':'Accueil','Statements':'Relevés','Grow':'Progresser','Coach':'Coach','Me':'Moi','Before Ledger reads your statement':'Avant que Ledger lise votre relevé','Agree and continue':'Accepter et continuer','Download my data':'Télécharger mes données','Delete everything':'Tout supprimer','Language':'Langue','Close':'Fermer','Download as spreadsheet (CSV)':'Télécharger en tableur (CSV)'},
+es:{'Home':'Inicio','Statements':'Extractos','Grow':'Crecer','Coach':'Coach','Me':'Yo','Before Ledger reads your statement':'Antes de que Ledger lea tu extracto','Agree and continue':'Aceptar y continuar','Download my data':'Descargar mis datos','Delete everything':'Borrar todo','Language':'Idioma','Close':'Cerrar','Download as spreadsheet (CSV)':'Descargar como hoja de cálculo (CSV)'},
+pt:{'Home':'Início','Statements':'Extratos','Grow':'Evoluir','Coach':'Coach','Me':'Eu','Before Ledger reads your statement':'Antes de o Ledger ler o seu extrato','Agree and continue':'Aceitar e continuar','Download my data':'Baixar os meus dados','Delete everything':'Apagar tudo','Language':'Idioma','Close':'Fechar','Download as spreadsheet (CSV)':'Baixar como planilha (CSV)'},
+sw:{'Home':'Nyumbani','Statements':'Taarifa','Grow':'Kua','Coach':'Mkufunzi','Me':'Mimi','Before Ledger reads your statement':'Kabla Ledger haijasoma taarifa yako','Agree and continue':'Kubali na uendelee','Download my data':'Pakua data yangu','Delete everything':'Futa kila kitu','Language':'Lugha','Close':'Funga','Download as spreadsheet (CSV)':'Pakua kama lahajedwali (CSV)'}};
+function T(k){const l=(typeof S!=='undefined'&&S&&S.lang)||'en';return (I18N[l]&&I18N[l][k])||k;}
 const TABS=[['home','Home','home'],['statements','Statements','doc',1],['grow','Grow','grow'],['coach','Coach','chat'],['me','Me','me']];
 function render(){
   setCur(activeCur());
@@ -974,10 +980,10 @@ function render(){
    <button class="pill" data-act="tab" data-arg="me" aria-label="Level ${lv.n}, ${S.xp} XP">${ic('star')}<span>Lv ${lv.n}</span><span class="lbl num">· ${S.xp} XP</span></button>
    ${installEvt?`<button class="pill" data-act="install" aria-label="Install Ledger on this device">${ic('upload')}<span>Install app</span></button>`:''}
    <button class="pill safe" data-act="privacy" aria-label="Privacy: your data stays on this device">${ic('lock')}<span class="lbl">On this device</span></button></div>`;
-  $('#tabs').innerHTML=TABS.map(([id,l,icn,mob])=>`<button class="tab" data-act="tab" data-arg="${id}" ${mob?'data-mobile':''} ${tab===id?'aria-current="page"':''}>${ic(icn)}<span>${l}</span></button>`).join('');
+  $('#tabs').innerHTML=TABS.map(([id,l,icn,mob])=>`<button class="tab" data-act="tab" data-arg="${id}" ${mob?'data-mobile':''} ${tab===id?'aria-current="page"':''}>${ic(icn)}<span>${T(l)}</span></button>`).join('');
   $('#side').innerHTML=isWide()?`<div class="card">${statementsPanel()}</div>`:'';
   const v=$('#view');
-  v.innerHTML=tab==='home'?viewHome():tab==='statements'?`<div class="card">${statementsPanel()}</div>`:tab==='grow'?viewGrow():tab==='coach'?viewCoach():viewMe();
+  v.innerHTML=`<h1 class="sr">Ledger, ${tab==='home'?'Home':tab==='statements'?'Statements':tab==='grow'?'Grow':tab==='coach'?'Coach':'Me'}</h1>`+(tab==='home'?viewHome():tab==='statements'?`<div class="card">${statementsPanel()}</div>`:tab==='grow'?viewGrow():tab==='coach'?viewCoach():viewMe());
   if(revealNext&&tab==='home'){revealNext=false;const st=$('#story');if(st){st.classList.add('reveal');countUps(st);setTimeout(()=>st.classList.remove('reveal'),1600);}}
   const chatEl=$('#chat');if(chatEl)chatEl.scrollTop=chatEl.scrollHeight;
 }
@@ -1259,10 +1265,10 @@ function viewMe(){
   <section class="card" id="privacy"><div class="head"><div><h2>Privacy & data</h2><p class="muted small">Ledger never connects to your bank. Statements are read on this device and the files are never uploaded.</p></div></div>
    <label class="toggle" for="tg-store"><div><b>Remember my data on this device</b><span>Keeps your transactions between visits. Off means everything clears when you close the page.</span></div><span class="switch"><input type="checkbox" id="tg-store" data-change="tg-store" ${c.store?'checked':''}><i></i></span></label>
    <label class="toggle" for="tg-ai"><div><b>AI coach</b><span>Sends a summary of your numbers to Claude when you ask a question. Never transactions, files or names.</span></div><span class="switch"><input type="checkbox" id="tg-ai" data-change="tg-ai" ${c.ai?'checked':''}><i></i></span></label>
-   <div class="row" style="margin-top:14px"><button class="btn q sm" data-act="export">Download my data</button><button class="btn q sm" data-act="wipe-ask">Delete everything</button></div>
+   <div class="row" style="margin-top:14px"><button class="btn q sm" data-act="export">${T('Download my data')}</button><button class="btn q sm" data-act="export-csv">${T('Download as spreadsheet (CSV)')}</button><button class="btn q sm" data-act="wipe-ask">${T('Delete everything')}</button></div><div class="row" style="margin-top:14px;align-items:center"><span class="small"><b>${T('Language')}</b></span>${LANGS.map(([c,n])=>`<button class="btn ${(S.lang||'en')===c?'':'q'} sm" data-act="set-lang" data-arg="${c}" aria-pressed="${(S.lang||'en')===c}">${n}</button>`).join('')}</div>
    <div id="wipeBox"></div>
    <p class="tiny" style="margin-top:12px">Ledger gives financial education based on your own data. It is not licensed investment, tax or legal advice.</p>
-   ${!IN_VIEWER?`<p class="small" style="margin-top:10px"><a href="privacy.html">Privacy policy</a> · <a href="terms.html">Terms of use</a></p>`:''}
+   ${!IN_VIEWER?`<p class="small legal-links" style="margin-top:4px"><a href="privacy.html">Privacy policy</a> · <a href="terms.html">Terms of use</a></p>`:''}
    ${CONTACT_EMAIL?`<p class="small muted" style="margin-top:6px">Questions or feedback: <span style="user-select:all">${esc(CONTACT_EMAIL)}</span></p>`:''}</section>
   ${!IN_VIEWER&&/iphone|ipad|ipod/i.test(navigator.userAgent)&&!navigator.standalone?'<section class="card"><h2>Put Ledger on your home screen</h2><p class="muted small" style="margin-top:6px">In Safari, tap the Share button, then "Add to Home Screen". Ledger then opens like an app and works offline.</p></section>':''}
   </div>`;
@@ -1316,12 +1322,13 @@ function expireChallenges(){
   S.challenges.active=S.challenges.active.filter(c=>{const d=CHAL[c.id];if(!d)return false;if(daysBetween(c.start,t)>=d.days+3&&(d.kind==='daily'||d.kind==='weekly')){S.challenges.ended.push({id:c.id,start:c.start});return false;}return true;});
 }
 function openConsent(then){
-  openSheet(`<button class="btn q sm x" data-act="close" aria-label="Close">${ic('x')}</button><h2>Before Ledger reads your statement</h2>
+  openSheet(`<button class="btn q sm x" data-act="close" aria-label="Close">${ic('x')}</button><h2>${T('Before Ledger reads your statement')}</h2>
    <p class="muted small">Ledger doesn't connect to your bank. You choose a statement you already have, and it is read here on this device.</p>
    <div><label class="toggle" for="cs-read"><div><b>Read my statement on this device</b><span>Needed to find your income, spending and patterns. The file itself is never uploaded or stored.</span></div><span class="switch"><input type="checkbox" id="cs-read" checked disabled><i></i></span></label>
    <label class="toggle" for="cs-store"><div><b>Remember my data on this device</b><span>Keeps your transactions for next time. Leave off to clear everything when you close the page.</span></div><span class="switch"><input type="checkbox" id="cs-store" checked><i></i></span></label></div>
+   <p class="tiny">Wherever you live, you can access, download and delete your data at any time in Me (your rights under laws such as the GDPR, UK GDPR, CCPA and POPIA). Ledger doesn't sell your data.</p>
    <p class="tiny">Ledger gives financial education based on your own data. It is not licensed investment, tax or legal advice. You can download or delete your data at any time in Me.</p>
-   <button class="btn" data-act="consent-go">Agree and continue</button>`);
+   <button class="btn" data-act="consent-go">${T('Agree and continue')}</button>`);
   consentThen=then;
 }
 let consentThen=null;
@@ -1438,6 +1445,13 @@ function openLesson(id,answered){
    <div class="stack" style="gap:8px"><h3>${esc(q.q)}</h3>${q.o.map((o,k)=>`<button class="opt ${answered!=null?(k===q.a?'right':k===answered?'wrong':''):''}" data-act="lesson-ans" data-arg="${id}:${k}" ${answered!=null?'disabled':''}>${esc(o)}</button>`).join('')}
    ${answered!=null?`<p class="small ${answered===q.a?'':'muted'}"><b>${answered===q.a?'Correct.':'Not quite.'}</b> ${esc(q.why)}</p>${answered===q.a?'<button class="btn" data-act="close">Done</button>':`<button class="btn q" data-act="lesson" data-arg="${id}">Try again</button>`}`:''}</div>`);
 }
+function doExportCsv(){
+  const q=v=>{v=String(v==null?'':v);if(/^[=+\-@\t\r]/.test(v))v="'"+v;return '"'+v.replace(/"/g,'""')+'"';};
+  const rows=S.demo?[]:S.txns;
+  const csv=['date,description,amount,currency,category'].concat(rows.map(t=>[t.date||t.d,q(t.desc||t.name||t.n||''),t.amt!=null?t.amt:t.a,t.cur||'NGN',q(t.cat||t.c||'')].join(','))).join('\n');
+  if(!rows.length){toast('No transactions to export yet.');return;}
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));a.download='ledger-transactions.csv';document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},1000);toast('Saved ledger-transactions.csv');
+}
 async function doExport(){
   const data={exportedAt:new Date().toISOString(),note:'Everything Ledger holds about you on this device.',consent:S.consent,quiz:S.quiz,statements:S.statements,transactions:S.demo?[]:S.txns.map(({id,src,mk,...t})=>t),xp:S.xp,badges:S.badges,checkins:S.checkins,challenges:S.challenges,lessons:S.lessons,plan:{code:P.id||null,uploadsUsed:P.used||0,trialStart:P.trialStart?new Date(P.trialStart).toISOString():null,subscription:P.sub||null}};
   const json=JSON.stringify(data,null,2);
@@ -1459,6 +1473,8 @@ const ACT={
   'load-demo':()=>{if(S.txns.length){toast('Your own data is loaded. Remove it first to view the sample.');return;}S.demo=true;revealNext=true;save();dataVer++;render();},
   'rm-stmt':id=>{S.txns=S.txns.filter(t=>t.src!==id);S.statements=S.statements.filter(s=>s.id!==id);if(S.txns.length&&!S.txns.some(t=>(t.cur||'NGN')===S.cur))S.cur=S.txns[0].cur||'NGN';toast('Statement removed from this device');U={};onDataChanged();},
   txns:f=>{txLimit=120;openTxns(f||'all');},
+  'export-csv':()=>doExportCsv(),
+  'set-lang':c=>{if(!I18N[c]&&c!=='en')return;S.lang=c;document.documentElement.lang=c;save();render();},
   'set-cur':c=>{if(!CUR_MAP[c])return;S.cur=c;setCur(c);dataVer++;save();render();},
   'tx-more':f=>{txLimit+=200;openTxns(f);},
   close:()=>closeSheet(),

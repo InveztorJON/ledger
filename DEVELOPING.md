@@ -72,3 +72,10 @@ Open a new chat and attach this folder, or give it the GitHub repo `InveztorJON/
 - 7 Oct 2026: Plan change. 2 free uploads (was 5), ₦10,000/month (was ₦1,500), each paid month capped at 20 statement uploads counted on the server, renew-or-cancel prompt at 80% (16 of 20) and at 20 of 20. Renewing a full month starts the new month immediately. Existing ₦1,500 subscribers keep their paid month; renewals cost ₦10,000. Terms and privacy updated.
 - 5 Oct 2026: Ledger Plus. 5 free uploads, ₦1,500/month by bank transfer, proof-of-payment upload, admin verification with AI receipt check, one-month periods, renew/cancel reminder 3 days before the end, restore on another phone. Privacy and terms updated.
 - 29 Sep 2026: first public deploy. Coach switched to Netlify AI Gateway. Legal pages carry the Jonspire Limited CAC details and jonspirelimited@gmail.com.
+
+## 19 Oct — Ledger v2
+- **Card payments auto-activate**: `netlify/functions/whop.mjs` (`/api/whop`) verifies Whop's Standard Webhooks signature, matches the payer by email, activates/extends Ledger Plus and sends the approval email. Setup (owner): in Whop dashboard create a webhook to `https://jonspire-ledger.netlify.app/api/whop` for `payment.succeeded`, then set `WHOP_WEBHOOK_SECRET` (the `ws_...` value) in Netlify env vars and redeploy. Until set the endpoint returns 503 and receipt upload + admin approval remains the fallback. Tests: `node tests/test_whop.mjs`.
+- **Statement accuracy**: multi-language months/headers, locale-aware decimals and date order, card-statement polarity, OFX/QFX/QIF/MT940/CAMT.053 (tests `global_test.py`, `global2_test.py`).
+- **Languages & region**: UI language selector (EN/FR/ES/PT/SW) for navigation, consent and data controls (`I18N`/`T()` in app.js; extend the dictionaries to translate more). `tests/lang_test.py`.
+- **Trust**: regional privacy rights line in consent, CSV export of transactions (formula-injection safe), skip link, h1, contrast fixes.
+- sw.js VERSION is `ledger-plus-7`.

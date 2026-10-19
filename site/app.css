@@ -5,7 +5,7 @@ body{margin:0}img{max-width:100%}[hidden]{display:none!important}
 :root{
   --bg:#EDF1EE; --surface:#FBFCFB; --surface-2:#E2E9E4; --line:#D0DAD3;
   --ink:#0F2219; --ink-2:#4B5E54; --ink-3:#5C6E64;
-  --green:#08784A; --green-ink:#F4FBF7; --green-soft:#D3ECDD;
+  --green:#06703F; --green-ink:#F4FBF7; --green-soft:#D3ECDD;
   --blue:#23608C; --blue-soft:#D6E6F2;
   --gold:#C08010; --gold-ink:#7E5300; --gold-soft:#F5E5C2;
   --coral:#A8341F; --coral-ink:#FFFFFF; --coral-soft:#F8E1DA;
@@ -250,7 +250,7 @@ details summary{cursor:pointer;font-weight:700;min-height:40px;display:flex;alig
 .cal i.today{box-shadow:0 0 0 2px var(--ink)}
 .badges{display:grid;grid-template-columns:repeat(auto-fill,minmax(92px,1fr));gap:14px 10px}
 .badge{text-align:center;font-size:.78rem;color:var(--ink-3)}
-.hex{width:56px;height:62px;margin:0 auto 6px;clip-path:polygon(50% 0,100% 25%,100% 75%,50% 100%,0 75%,0 25%);display:grid;place-items:center;font-family:var(--f-display);font-weight:800;font-size:1rem;background:var(--surface-2);color:var(--ink-3)}
+.hex{width:56px;height:62px;margin:0 auto 6px;clip-path:polygon(50% 0,100% 25%,100% 75%,50% 100%,0 75%,0 25%);display:grid;place-items:center;font-family:var(--f-display);font-weight:800;font-size:1rem;background:var(--surface-2);color:var(--ink-2)}
 .badge.on{color:var(--ink)}
 .badge.on .hex{background:var(--gold);color:var(--surface)}
 
@@ -330,3 +330,7 @@ details summary{cursor:pointer;font-weight:700;min-height:40px;display:flex;alig
 .xp.warn i{background:var(--amber,#B7791F)}
 .xp.bad i{background:var(--red,#C0392B)}
 .xp.info i{background:var(--green)}
+
+/* v2 accessibility: bigger touch targets for stand-alone links, visible h1 for screen readers */
+.legal-links a{display:inline-block;padding:10px 4px;min-height:24px}
+.skip{position:absolute;left:8px;top:-60px;z-index:100;background:var(--green);color:var(--green-ink);padding:10px 14px;border-radius:10px;font-weight:700}.skip:focus{top:8px}

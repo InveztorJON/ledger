@@ -37,7 +37,7 @@ async function loadThumbs() {
   if (!data) return;
   for (const s of visible()) {
     const p = s.proofs[0];
-    if (!p || p.type === 'application/pdf' || thumbs[p.key]) continue;
+    if (!p || p.type === 'application/pdf' || p.type === 'whop' || thumbs[p.key]) continue;
     thumbs[p.key] = 'loading';
     try { const b = await (await api('proof?key=' + encodeURIComponent(p.key))).blob(); thumbs[p.key] = URL.createObjectURL(b); }
     catch (e) { thumbs[p.key] = 'error'; }
@@ -76,6 +76,7 @@ function wa(s, kind) {
   return `https://wa.me/${encodeURIComponent(s.phone)}?text=${encodeURIComponent(text)}`;
 }
 function thumbHTML(p) {
+  if (p.type === 'whop') return '<span class="tiny">Card payment (Whop)</span>';
   if (p.type === 'application/pdf') return `<button class="btn q sm" data-act="open-pdf" data-arg="${esc(p.key)}">Open PDF receipt</button>`;
   const u = thumbs[p.key];
   if (!u || u === 'loading') return '<span class="tiny">Loading receipt…</span>';
@@ -103,7 +104,7 @@ function proofHTML(s, p) {
   }
   const stateTxt = { pending: 'Waiting for review', approved: 'Approved', rejected: 'Rejected' + (p.reason ? `: ${p.reason}` : ''), replaced: 'Replaced by a newer receipt' }[p.state] || p.state;
   return `<div class="proof"><div class="thumb" data-thumb="${esc(p.key)}">${thumbHTML(p)}</div>
-   <div class="stack" style="gap:10px"><p class="small"><b>Receipt uploaded ${fmtT(p.at)}</b> · ${esc(stateTxt)}</p>${checkHTML(s, p)}${actions}</div></div>`;
+   <div class="stack" style="gap:10px"><p class="small"><b>${p.type === 'whop' ? 'Card payment received' : 'Receipt uploaded'} ${fmtT(p.at)}</b> · ${esc(stateTxt)}</p>${checkHTML(s, p)}${actions}</div></div>`;
 }
 function subHTML(s) {
   const p = s.proofs[0];
