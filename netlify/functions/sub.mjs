@@ -64,7 +64,19 @@ export default async (req, context) => {
       const id = String(body.id || '').toUpperCase().replace(/\s/g, '').replace(/^LDG(?!-)/, 'LDG-');
       const phone = normPhone(body.phone);
       const rec = validId(id) && phone ? await st.getSub(id) : null;
-      if (!rec || rec.phone !== phone) return json(404, { error: "We couldn't find a subscription with that code and phone number." });
+      // After 5 wrong phone numbers for one code, that code can't be restored for an hour (stored with the record, so it holds across servers).
+      const now = Date.now();
+      if (rec && rec.lock && now < rec.lock.until) return json(429, { error: 'Too many tries for this code. Try again in an hour.' });
+      if (!rec || rec.phone !== phone) {
+        if (rec) {
+          const f = rec.lock && now - rec.lock.first < 3600e3 ? rec.lock : { n: 0, first: now };
+          f.n++;
+          rec.lock = f.n >= 5 ? { n: f.n, first: f.first, until: now + 3600e3 } : f;
+          await st.putSub(rec);
+        }
+        return json(404, { error: "We couldn't find a subscription with that code and phone number." });
+      }
+      delete rec.lock;
       const token = newToken();
       await addToken(rec, token);
       await st.putSub(rec);
@@ -111,7 +123,7 @@ export default async (req, context) => {
       rec.proofs = rec.proofs.slice(-24);
       rec.cancelAtEnd = false;
       await st.putSub(rec);
-      await sendMail(mail.receiptReceived(rec));
+      if (limit('proof-mail', String(rec.email).toLowerCase(), 3, 864e5)) await sendMail(mail.receiptReceived(rec));
       if (adminAddress()) await sendMail(mail.adminNewProof(rec, adminAddress()));
       return json(200, publicView(rec));
     }

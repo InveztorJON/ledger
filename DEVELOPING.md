@@ -73,6 +73,14 @@ Open a new chat and attach this folder, or give it the GitHub repo `InveztorJON/
 - 5 Oct 2026: Ledger Plus. 5 free uploads, ₦1,500/month by bank transfer, proof-of-payment upload, admin verification with AI receipt check, one-month periods, renew/cancel reminder 3 days before the end, restore on another phone. Privacy and terms updated.
 - 29 Sep 2026: first public deploy. Coach switched to Netlify AI Gateway. Legal pages carry the Jonspire Limited CAC details and jonspirelimited@gmail.com.
 
+## 20 Oct — Hardening pass
+- Whop webhook: when several registrations share one email, the payment goes to the newest (a record already holding that payment wins), so pre-registering someone else's email can't capture their payment.
+- Restore: 5 wrong phone numbers for one code locks that code for an hour (stored on the record, so it holds across servers).
+- Admin: new "End access (refund)" button (`POST /api/admin/revoke`) for refunds and chargebacks; proof files are served with `Content-Security-Policy: sandbox`.
+- Receipt-received emails are capped at 3 a day per address; coach refuses calls whose `Sec-Fetch-Site` is cross-site.
+- Tests: `tests/test_loopholes.mjs`, `tests/xss_test.py` (hostile statement text cannot inject markup).
+- Known limits: rate limits are per server instance (in-memory); the free trial is browser-side by design; refunds are not automatic (use End access).
+
 ## 20 Oct — Featured samples for 10 currencies
 - `SAMPLES` in site/app.js: fictional people in NGN, USD, GBP, EUR, ZAR, KES, GHS, EGP, INR, BRL (local merchants, rails, fees). Amounts are generated in naira-sized units then scaled by each sample's `k` (never an FX conversion).
 - The sample opens on the visitor's locale currency (else Tolu), rotates every 9 s on Home (paused when scrolled, a sheet is open or a field is focused), and tapping a chip picks one and stops rotation.

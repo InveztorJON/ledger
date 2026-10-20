@@ -58,6 +58,8 @@ function clean(body) {
 export default async (req, context) => {
   if (req.method !== 'POST') return json(405, { error: 'Use POST' });
   if (!allowedOrigin(req)) return json(403, { error: 'Not allowed' });
+  const site = req.headers.get('sec-fetch-site');   // browsers say who is calling; a page on another site can't use our coach
+  if (site && !['same-origin', 'same-site', 'none'].includes(site)) return json(403, { error: 'Not allowed' });
   const key = process.env.ANTHROPIC_API_KEY;
   if (!key) return json(503, { error: 'Coach is not set up yet' });
 

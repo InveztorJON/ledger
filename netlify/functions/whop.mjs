@@ -48,10 +48,14 @@ export default async (req) => {
   const payId = String(pay.id || ev.id || '');
   if (!email || !payId) return json(422, { error: 'Payment has no email' });
   let st; try { st = await stores(); } catch { return json(503, { error: 'Storage unavailable' }); }
+  // Several people can type the same email. Prefer a record that already holds this payment, then the newest one,
+  // so someone who registered another person's email earlier can't capture that person's payment.
   let rec = null;
   for (const id of await st.listSubIds()) {
     const r = await st.getSub(id);
-    if (r && r.email && String(r.email).toLowerCase() === email) { rec = r; break; }
+    if (!r || !r.email || String(r.email).toLowerCase() !== email) continue;
+    if ((r.proofs || []).some(p => p.key === 'whop:' + payId)) { rec = r; break; }
+    if (!rec || String(r.createdAt) > String(rec.createdAt)) rec = r;
   }
   // 404 makes Whop retry later, which gives a payer who has not registered in Ledger yet time to do so.
   if (!rec) return json(404, { error: 'No Ledger subscriber with this email yet' });

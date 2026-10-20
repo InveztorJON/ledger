@@ -8,7 +8,7 @@ const fmtT = iso => iso ? new Date(iso).toLocaleString('en-NG', { day: 'numeric'
 
 let KEY = '';
 try { KEY = sessionStorage.getItem('ledger_admin') || ''; } catch (e) {}
-let data = null, filter = 'review', busy = {}, msg = '', rejecting = null, confirming = null;
+let data = null, filter = 'review', busy = {}, msg = '', rejecting = null, confirming = null, revoking = null;
 const thumbs = {};            // proof key -> object URL
 
 async function api(path, opts = {}) {
@@ -114,7 +114,8 @@ function subHTML(s) {
   if (p && p.state === 'rejected') links.push(`<a class="btn q sm" href="${esc(wa(s, 'rejected'))}" target="_blank" rel="noopener">WhatsApp: payment not found</a>`);
   return `<section class="card sub"><div class="who"><div><h2>${esc(s.name)}</h2><div class="meta"><span class="num">${esc(s.id)}</span><span>+${esc(s.phone)}</span>${s.email ? `<span>${esc(s.email)}</span>` : ''}<span>Joined ${fmt(s.createdAt)}</span>${s.end ? `<span>${s.status === 'active' ? 'Paid until' : 'Ended'} ${fmt(s.end)}</span>` : ''}<span>${s.periods.length} month${s.periods.length === 1 ? '' : 's'} paid</span>${s.usage ? `<span>${s.usage.used}/${s.usage.limit} uploads this month${s.usage.limitReached ? ' (all used)' : s.usage.warn ? ' (80%+)' : ''}</span>` : ''}</div></div>${chip(s)}</div>
    ${p ? proofHTML(s, p) : '<p class="small muted">No receipt uploaded yet.</p>'}
-   ${links.length ? `<div class="row">${links.join('')}</div>` : ''}</section>`;
+   ${links.length ? `<div class="row">${links.join('')}</div>` : ''}
+   ${s.status === 'active' ? (revoking === s.id ? `<div class="status err small"><b>End ${esc(s.name)}'s access now?</b> Use this for a refund or chargeback. They keep their data on their own device but lose Plus.<div class="row" style="margin-top:8px"><button class="btn sm" data-act="revoke-go" data-arg="${esc(s.id)}">Yes, end access</button><button class="btn q sm" data-act="revoke-no">Keep</button></div></div>` : `<div class="row"><button class="btn link" data-act="revoke" data-arg="${esc(s.id)}">End access (refund)</button></div>`) : ''}</section>`;
 }
 function render() {
   const root = $('#root');
@@ -145,6 +146,16 @@ async function act(name, arg) {
   if (name === 'confirm') { confirming = arg; rejecting = null; render(); loadThumbs(); return; }
   if (name === 'rejecting') { rejecting = arg; confirming = null; render(); loadThumbs(); return; }
   if (name === 'cancel-confirm') { rejecting = confirming = null; render(); loadThumbs(); return; }
+  if (name === 'revoke') { revoking = arg; render(); loadThumbs(); return; }
+  if (name === 'revoke-no') { revoking = null; render(); loadThumbs(); return; }
+  if (name === 'revoke-go') {
+    try {
+      const upd = await (await api('revoke', { method: 'POST', body: JSON.stringify({ id: arg }) })).json();
+      const i = data.subscriptions.findIndex(x => x.id === arg); if (i >= 0) data.subscriptions[i] = upd;
+      msg = '';
+    } catch (e) { msg = e.message; }
+    revoking = null; render(); loadThumbs(); return;
+  }
   if (name === 'zoom') { const u = thumbs[arg]; if (u && u !== 'loading' && u !== 'error') document.body.insertAdjacentHTML('beforeend', `<div class="big" data-act="unzoom"><img src="${u}" alt="Proof of payment, full size"></div>`); return; }
   if (name === 'unzoom') { const b = $('.big'); if (b) b.remove(); return; }
   if (name === 'open-pdf') {

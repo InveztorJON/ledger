@@ -86,7 +86,7 @@ export default async (req, context) => {
       if (!/^LDG-[2-9A-HJ-NP-Z]{6}\/\d+$/.test(key)) return json(400, { error: 'Bad key' });
       const f = await st.getProof(key);
       if (!f) return json(404, { error: 'Not found' });
-      return new Response(f.bytes, { status: 200, headers: { 'content-type': f.type, 'cache-control': 'no-store', 'content-disposition': 'inline' } });
+      return new Response(f.bytes, { status: 200, headers: { 'content-type': f.type, 'cache-control': 'no-store', 'content-disposition': 'inline', 'content-security-policy': 'sandbox', 'x-content-type-options': 'nosniff' } });
     }
 
     if (req.method !== 'POST') return json(405, { error: 'Use POST' });
@@ -95,6 +95,12 @@ export default async (req, context) => {
     if (!validId(body.id)) return json(400, { error: 'Bad id' });
     const rec = await st.getSub(body.id);
     if (!rec) return json(404, { error: 'Subscription not found' });
+    if (action === 'revoke') {   // refund or chargeback: end access now. The payment records stay for the audit trail.
+      rec.end = new Date().toISOString(); rec.cancelAtEnd = false;
+      for (const p of rec.periods || []) if (Date.parse(p.end) > Date.now()) p.end = rec.end;
+      rec.revokedAt = rec.end; await st.putSub(rec);
+      return json(200, summary(rec));
+    }
     const proof = (rec.proofs || []).find(p => p.key === body.key);
     if (!proof) return json(404, { error: 'Proof not found' });
 
