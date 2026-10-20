@@ -6,7 +6,7 @@
 //   POST approve {id, key}          -> payment confirmed: one month starts now (or from the current end date)
 //   POST reject  {id, key, reason}  -> payment not found; the user sees the reason and can upload again
 
-import { json, clientIp, limit, blocked, readJson } from '../lib/http.mjs';
+import { json, clientIp, glimit, gblocked, readJson } from '../lib/http.mjs';
 import { PLAN, safeEqual, validId, publicView, applyApproval, applyRejection, judgeReceipt } from '../lib/plan.mjs';
 import { stores } from '../lib/store.mjs';
 import { sendMail } from '../lib/mail.mjs';
@@ -64,13 +64,14 @@ export default async (req, context) => {
   const ip = clientIp(req, context);
   const adminKey = process.env.ADMIN_KEY;
   if (!adminKey || adminKey.length < 12) return json(503, { error: 'Admin is not set up. Add ADMIN_KEY (12+ characters) in Netlify environment variables.' });
-  if (blocked('admin-bad', ip, 10, 900e3)) return json(429, { error: 'Too many wrong passwords. Wait 15 minutes.' });
-  if (!safeEqual(req.headers.get('x-admin-key'), adminKey)) { limit('admin-bad', ip, 10, 900e3); return json(401, { error: 'Wrong admin password.' }); }
+  let st;
+  try { st = await stores(); } catch (e) { return json(503, { error: 'Storage unavailable. Try again soon.' }); }
+  if (await gblocked(st, 'admin-bad', ip, 10, 900e3)) return json(429, { error: 'Too many wrong passwords. Wait 15 minutes.' });
+  if (await gblocked(st, 'admin-bad-all', 'all', 60, 900e3)) return json(429, { error: 'Too many wrong passwords from many places. Wait 15 minutes.' });
+  if (!safeEqual(req.headers.get('x-admin-key'), adminKey)) { await glimit(st, 'admin-bad', ip, 10, 900e3); await glimit(st, 'admin-bad-all', 'all', 60, 900e3); return json(401, { error: 'Wrong admin password.' }); }
 
   const url = new URL(req.url);
   const action = url.pathname.split('/').filter(Boolean).pop();
-  let st;
-  try { st = await stores(); } catch (e) { return json(503, { error: 'Storage unavailable. Try again soon.' }); }
 
   try {
     if (req.method === 'GET' && action === 'list') {

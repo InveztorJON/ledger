@@ -92,3 +92,12 @@ Open a new chat and attach this folder, or give it the GitHub repo `InveztorJON/
 - **Languages & region**: UI language selector (EN/FR/ES/PT/SW) for navigation, consent and data controls (`I18N`/`T()` in app.js; extend the dictionaries to translate more). `tests/lang_test.py`.
 - **Trust**: regional privacy rights line in consent, CSV export of transactions (formula-injection safe), skip link, h1, contrast fixes.
 - sw.js VERSION is `ledger-plus-7`.
+
+## 20 Oct — Account-first trial, shared rate limits, legal update
+- **Accounts** (`netlify/functions/acct.mjs`, `netlify/lib/acct.mjs`, store `ledger-accounts`): sign-up by email → 6-digit code (15 min, 5 tries, 45 s cooldown, 5/hr) → choose password (PBKDF2-SHA256 150k). Email canonicalised (case, +tag, gmail dots) so variants share one account/trial. Sessions are random tokens stored hashed (max 5). Login lock: 5 fails / 15 min. Forgot-password uses the same code flow.
+- **Trial lives on the account** (`trialStart`, `trialUsed`; ends after 7 days or 20 uploads). Uploads require sign-in; the coach and Plus are checked server-side (`mayCoach`). Delete account removes email/password/sessions but leaves a tombstone with trial dates so deleting cannot reset the trial.
+- **Rate limits** are shared across serverless instances: `st.hit()` writes one blob per hit (`ledger-rates`), counted by listing; fails closed if the store errors; swept daily by `remind.mjs`. Env: `COACH_ACCOUNT_DAILY_LIMIT`, `COACH_DAILY_LIMIT` (global ceiling).
+- **Viewer** (`window.claude`) keeps the local trial and no accounts.
+- **Legal**: privacy and terms rewritten (20 Oct 2026): accounts, trial record, security counters, deletion, regional laws for every featured currency, transfers, consumer-rights clause. Needs lawyer review; check whether an EU/UK representative is required.
+- Real mail (`MAIL_USER`/`MAIL_PASS`) must be configured: sign-up depends on it.
+- Tests: `test_acct.mjs`, `acct_test.py` added; sw VERSION `ledger-plus-10`.

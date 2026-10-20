@@ -9,8 +9,12 @@ process.env.ANTHROPIC_API_KEY = 'test-key';
 process.env.URL = `http://127.0.0.1:${port}`;
 process.env.COACH_HOURLY_LIMIT = '5';
 process.env.ADMIN_KEY = 'test-admin-key-123';
-const mem = { subs: new Map(), proofs: new Map() };
+const mem = { subs: new Map(), proofs: new Map(), accts: new Map(), mail: [] };
+globalThis.__LEDGER_MAIL__ = async m => { mem.mail.push(m); };
+process.env.MAIL_USER = 'ledger@example.com'; process.env.MAIL_PASS = 'x';
 globalThis.__LEDGER_STORES__ = {
+  getAcct: async k => mem.accts.has(k) ? JSON.parse(mem.accts.get(k)) : null,
+  putAcct: async r => { mem.accts.set(r.key, JSON.stringify(r)); },
   getSub: async id => mem.subs.has(id) ? JSON.parse(mem.subs.get(id)) : null,
   putSub: async rec => { mem.subs.set(rec.id, JSON.stringify(rec)); },
   listSubIds: async () => [...mem.subs.keys()],
@@ -33,11 +37,12 @@ globalThis.fetch = async (url, init) => {
   return realFetch(url, init);
 };
 const fn = n => import(path.resolve(dir, '..', 'netlify', 'functions', n + '.mjs')).then(m => m.default);
-const coach = await fn('coach'), sub = await fn('sub'), admin = await fn('admin');
+const coach = await fn('coach'), sub = await fn('sub'), admin = await fn('admin'), acct = await fn('acct');
+const A = await import(path.resolve(dir, '..', 'netlify', 'lib', 'acct.mjs'));
 const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.webmanifest': 'application/manifest+json', '.txt': 'text/plain' };
 http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://127.0.0.1:${port}`);
-  const handler = url.pathname === '/api/coach' ? coach : url.pathname.startsWith('/api/sub/') ? sub : url.pathname.startsWith('/api/admin/') ? admin : null;
+  const handler = url.pathname === '/api/coach' ? coach : url.pathname.startsWith('/api/sub/') ? sub : url.pathname.startsWith('/api/acct/') ? acct : url.pathname.startsWith('/api/admin/') ? admin : null;
   if (url.pathname === '/__setEnd') {   // test hook: move a subscription's end date to now + days
     const rec = JSON.parse(mem.subs.get(url.searchParams.get('id')));
     rec.end = new Date(Date.now() + Number(url.searchParams.get('days')) * 864e5).toISOString();
@@ -46,6 +51,18 @@ http.createServer(async (req, res) => {
     rec.periods = [{ start: new Date(Date.now() - 864e5).toISOString(), end: rec.end, approvedAt: rec.end, proof: 'test', used }];
     mem.subs.set(rec.id, JSON.stringify(rec)); res.writeHead(200); res.end('ok'); return;
   }
+  if (url.pathname === '/__mkacct') {   // test hook: a confirmed account that is already signed in on this browser
+    const email = url.searchParams.get('email') || 'tester@example.com', canon = A.canonEmail(email), key = await A.acctKey(canon);
+    let rec = (await globalThis.__LEDGER_STORES__.getAcct(key)) || { key, email, canon, ...(await A.hashPassword('test-password-1')), verified: true, createdAt: new Date().toISOString(), tokens: [] };
+    const token = A.newToken(); await A.addToken(rec, token); await globalThis.__LEDGER_STORES__.putAcct(rec);
+    res.writeHead(200, { 'content-type': 'application/json' }); res.end(JSON.stringify({ k: key, token, email, trial: A.trialState(rec) })); return;
+  }
+  if (url.pathname === '/__setTrial') {   // test hook: move an account's trial start back, and set the uploads used
+    const rec = JSON.parse(mem.accts.get(url.searchParams.get('k')));
+    rec.trialStart = Date.now() - Number(url.searchParams.get('daysAgo')) * 864e5; rec.trialUsed = Number(url.searchParams.get('used') || 1);
+    mem.accts.set(rec.key, JSON.stringify(rec)); res.writeHead(200); res.end('ok'); return;
+  }
+  if (url.pathname === '/__mail') { const to = url.searchParams.get('to'); const m = [...mem.mail].reverse().find(x => !to || x.to === to); res.writeHead(200, { 'content-type': 'application/json' }); res.end(JSON.stringify(m || null)); return; }
   if (handler) {
     const chunks = []; for await (const c of req) chunks.push(c);
     const r = await handler(new Request(url, { method: req.method, headers: req.headers, body: req.method === 'POST' ? Buffer.concat(chunks) : undefined }), { ip: req.headers['x-test-ip'] || '1.1.1.1' });

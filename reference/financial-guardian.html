@@ -456,18 +456,21 @@ function readTrialCookie(){try{const m=document.cookie.match(/(?:^|; )ledger_tri
 function writeTrialCookie(n){try{document.cookie=`${TRIAL_COOKIE}=${n}; max-age=63072000; path=/; SameSite=Strict${location.protocol==='https:'?'; Secure':''}`;}catch(e){}}
 if(typeof P.used!=='number')P.used=S.demo?0:S.statements.length;
 if(!P.trialStart&&P.used>0)P.trialStart=Date.now();   // people who already uploaded before the 7-day trial existed get a fresh 7 days
-if(!IN_VIEWER){const c=readTrialCookie();if(c&&(!P.trialStart||c<P.trialStart))P.trialStart=c;if(P.trialStart)writeTrialCookie(P.trialStart);}
 savePlan();
-const planActive=()=>!!(P.sub&&P.sub.end&&Date.parse(P.sub.end)>Date.now());
+const planActive=()=>!!(P.sub&&P.sub.end&&Date.parse(P.sub.end)>Date.now());   // the server's usage count (P.sub) is the record for paid plans
 const monthLimit=()=>PLAN.monthlyUploads;
 const monthUsed=()=>planActive()?Math.min(monthLimit(),((P.sub&&P.sub.usage&&P.sub.usage.used)||0)+(P.pendingUse||0)):0;   // server count plus uploads not yet reported
 const monthLeft=()=>monthLimit()-monthUsed();
 const monthFull=()=>planActive()&&monthUsed()>=monthLimit();
 const warnAtCount=()=>Math.ceil(monthLimit()*PLAN.warnAt);
 const monthWarn=()=>planActive()&&monthUsed()>=warnAtCount()&&!monthFull();
-const trialEnd=()=>P.trialStart?P.trialStart+PLAN.trialDays*864e5:0;
-const trialStarted=()=>!!P.trialStart;
-const trialOver=()=>trialStarted()&&(Date.now()>=trialEnd()||(P.used||0)>=PLAN.monthlyUploads);
+// In the real app the free trial belongs to the signed-in account and is counted by our server, so clearing the browser or
+// using another phone can't start a second one. (The preview inside Claude has no accounts and keeps its own local count.)
+const signedIn=()=>!!(P.acct&&P.acct.k&&P.acct.token);
+const trialData=()=>IN_VIEWER?{start:P.trialStart||0,used:P.used||0}:{start:(P.acct&&P.acct.trial&&P.acct.trial.start)||0,used:(P.acct&&P.acct.trial&&P.acct.trial.used)||0};
+const trialEnd=()=>trialData().start?trialData().start+PLAN.trialDays*864e5:0;
+const trialStarted=()=>!!trialData().start;
+const trialOver=()=>trialStarted()&&(Date.now()>=trialEnd()||trialData().used>=PLAN.monthlyUploads);
 const trialDaysLeft=()=>trialStarted()?Math.max(0,Math.ceil((trialEnd()-Date.now())/864e5)):PLAN.trialDays;
 const freeLeft=()=>trialOver()?0:Math.max(1,trialDaysLeft());   // days of free trial left (7 before the first upload)
 const canUpload=()=>planActive()?!monthFull():!trialOver();
@@ -499,12 +502,14 @@ async function refreshPlan(){
   maybeNotify();
 }
 function gateUpload(then){
+  if(!IN_VIEWER&&!signedIn()){openAuth('signup','pick');return;}
+  if(!IN_VIEWER)refreshAcct();                                    // keeps the trial in step with the server for next time
   if(canUpload())return then();
   openPlan(monthFull()?'full':'limit');
   if(P.id&&!IN_VIEWER)refreshPlan().then(()=>{if(canUpload()&&$('#planSheet')){closeSheet();toast('Your plan is active. Choose your statement again.');}});
 }
-// Counts one upload. Free uploads are counted on this device; paid uploads are counted by our server (the record that counts),
-// and the app keeps its own tally in step so the meter is right even offline.
+// Counts one upload. Paid uploads are counted by our server's subscription record; free-trial uploads are counted by our server on the account.
+// The app keeps its own tally in step so the meter is right even offline.
 function countUpload(){
   if(planActive()){
     P.pendingUse=(P.pendingUse||0)+1;savePlan();
@@ -512,11 +517,33 @@ function countUpload(){
     else usageNudge();
     return;
   }
+  if(!IN_VIEWER&&signedIn()){
+    const t=P.acct.trial=P.acct.trial||{start:0,used:0};const firstUse=!t.start;
+    if(firstUse)t.start=Date.now();t.used=(t.used||0)+1;P.pendingTrial=(P.pendingTrial||0)+1;savePlan();
+    flushTrial().then(()=>{if(trialOver())setTimeout(()=>openPlan('limit'),900);else toast(firstUse?`Your ${PLAN.trialDays}-day free trial has started`:`Free trial: ${trialDaysLeft()} day${trialDaysLeft()===1?'':'s'} left`);render();});
+    return;
+  }
   const firstUse=!P.trialStart;
-  if(firstUse){P.trialStart=Date.now();if(!IN_VIEWER)writeTrialCookie(P.trialStart);}
+  if(firstUse)P.trialStart=Date.now();
   P.used=(P.used||0)+1;savePlan();
   if(trialOver())setTimeout(()=>openPlan('limit'),900);
   else toast(firstUse?`Your ${PLAN.trialDays}-day free trial has started`:`Free trial: ${trialDaysLeft()} day${trialDaysLeft()===1?'':'s'} left`);
+}
+let flushingTrial=null;
+function flushTrial(){
+  if(flushingTrial)return flushingTrial;
+  flushingTrial=(async()=>{
+    while((P.pendingTrial||0)>0&&signedIn()){
+      try{takeAcct(await acctApi('use',{k:P.acct.k,token:P.acct.token}));P.pendingTrial=Math.max(0,(P.pendingTrial||0)-1);}
+      catch(e){
+        if(e&&e.status===402){P.pendingTrial=0;if(e.data)takeAcct(e.data);}               // the server says the trial is over: the server wins
+        else if(e&&e.status===401){P.pendingTrial=0;P.acct=null;}
+        break;                                                                           // offline or server trouble: keep the rest queued
+      }
+    }
+    savePlan();
+  })().finally(()=>{flushingTrial=null;});
+  return flushingTrial;
 }
 // Reports uploads to the server one at a time. Uploads made offline wait here and are sent as soon as the phone is online again.
 let flushing=null;
@@ -535,7 +562,7 @@ function flushUse(){
   })().finally(()=>{flushing=null;});
   return flushing;
 }
-if(!IN_VIEWER)addEventListener('online',()=>{if(P.id&&P.token&&(P.pendingUse||0)>0)flushUse().then(()=>render());});
+if(!IN_VIEWER)addEventListener('online',()=>{if(P.id&&P.token&&(P.pendingUse||0)>0)flushUse().then(()=>render());if(signedIn()&&(P.pendingTrial||0)>0)flushTrial().then(()=>render());});
 // At 80% and at 100% of the month's allowance, ask the person to renew or cancel.
 function usageNudge(){
   if(!planActive())return;
@@ -550,6 +577,73 @@ function usageNudge(){
 async function usageNotify(){
   if(!notifyOk()||Notification.permission!=='granted')return;
   try{const reg=await navigator.serviceWorker.ready;reg.showNotification(monthFull()?'Ledger Plus: all uploads used':`Ledger Plus: ${Math.round(PLAN.warnAt*100)}% of uploads used`,{body:monthFull()?`You've used all ${monthLimit()} uploads. Renew for ${priceTxt()} to keep going.`:`${monthUsed()} of ${monthLimit()} used. Renew for ${priceTxt()} or cancel.`,icon:'icons/icon-192.png',badge:'icons/favicon-32.png',tag:'ledger-usage'});}catch(e){}
+}
+
+/* ---------- account (email + password) ---------- */
+let authMode='signup', authDraft={email:''}, authErr='', authBusy=false, authInfo='', authAfter='';
+async function acctApi(action,body){
+  const r=await fetch('/api/acct/'+action,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});
+  let d={};try{d=await r.json();}catch(e){}
+  if(!r.ok){const e=new Error(d.error||'Something went wrong. Try again.');e.status=r.status;e.data=d;throw e;}
+  return d;
+}
+function takeAcct(d){
+  if(!d||!d.k)return;
+  P.acct={k:d.k,token:d.token||(P.acct&&P.acct.token)||'',email:d.email,trial:d.trial,subId:d.subId||null,planActive:!!d.planActive};
+  if(d.subToken&&d.subId){P.id=d.subId;P.token=d.subToken;}
+  savePlan();
+}
+async function refreshAcct(){
+  if(IN_VIEWER||!signedIn())return;
+  try{takeAcct(await acctApi('status',{k:P.acct.k,token:P.acct.token}));}
+  catch(e){if(e&&e.status===401){P.acct=null;savePlan();}}
+  render();
+}
+function openAuth(mode,after){if(mode){authMode=mode;authErr='';authInfo='';}if(after!==undefined)authAfter=after;openSheet(authHTML());const f=$('#authSheet input');if(f)f.focus();}
+function authHTML(){
+  const x=`<button class="btn q sm x" data-act="close" aria-label="Close">${ic('x')}</button>`;
+  const err=authErr?`<div class="status err" role="alert">${esc(authErr)}</div>`:'',info=authInfo?`<div class="status ok" role="status">${esc(authInfo)}</div>`:'';
+  const busy=authBusy?`<div class="status busy" role="status"><span class="spin" aria-hidden="true"></span>Please wait…</div>`:'';
+  const emailF=`<label class="f" for="auEmail">Email<input type="email" id="auEmail" autocomplete="email" inputmode="email" maxlength="120" required value="${esc(authDraft.email)}"></label>`;
+  const pwF=(label,ac)=>`<label class="f" for="auPw">${label}<input type="password" id="auPw" autocomplete="${ac}" minlength="${ac==='current-password'?1:8}" maxlength="128" required></label><label class="checkrow" for="auShow"><input type="checkbox" id="auShow" data-change="auth-show"><span>Show password</span></label>`;
+  const codeF=`<label class="f" for="auCode">6-digit code from your email<input type="text" id="auCode" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]{6}" required></label>`;
+  const go=t=>`<button class="btn" type="submit" ${authBusy?'disabled':''}>${t}</button>`;
+  const lnk=(m,t)=>`<button type="button" class="btn link" data-act="auth-mode" data-arg="${m}">${t}</button>`;
+  let h;
+  if(authMode==='signup')h=`<h2>Create your Ledger account</h2><p class="muted small">Your free ${PLAN.trialDays}-day trial belongs to your account, so it follows you to any phone. We confirm your email with a code, then you choose a password.</p>${emailF}${pwF('Choose a password (8 or more characters)','new-password')}<label class="checkrow" for="auAgree"><input type="checkbox" id="auAgree"><span>I agree to the <a href="terms.html" target="_blank" rel="noopener">terms</a> and <a href="privacy.html" target="_blank" rel="noopener">privacy policy</a>, including Ledger keeping my email and trial usage on its server. My statements stay on my device.</span></label>${err}${busy}${go('Create account')}<p class="small">Already have an account? ${lnk('login','Log in')}</p>`;
+  else if(authMode==='login')h=`<h2>Log in to Ledger</h2>${emailF}${pwF('Password','current-password')}${err}${busy}${go('Log in')}<p class="small">${lnk('forgot','Forgot your password?')} · ${lnk('signup','Create an account')}</p>`;
+  else if(authMode==='code')h=`<h2>Check your email</h2>${info||`<p class="muted small">We sent a 6-digit code to <b>${esc(authDraft.email)}</b>.</p>`}${codeF}${err}${busy}${go('Confirm')}<p class="small">${lnk('resend','Send a new code')} · ${lnk('signup','Use a different email')}</p>`;
+  else if(authMode==='forgot')h=`<h2>Reset your password</h2><p class="muted small">Enter your email and we'll send a code.</p>${emailF}${err}${busy}${go('Send code')}<p class="small">${lnk('login','Back to log in')}</p>`;
+  else h=`<h2>Choose a new password</h2>${info}${codeF}${pwF('New password (8 or more characters)','new-password')}${err}${busy}${go('Save password')}<p class="small">${lnk('forgot','Send a new code')}</p>`;
+  return`<form id="authSheet" class="stack" data-form="auth" novalidate>${x}${h}</form>`;
+}
+async function authRun(fn){authBusy=true;authErr='';openAuth();try{await fn();}catch(e){authErr=e.message||'Something went wrong. Try again.';}finally{authBusy=false;if($('#authSheet'))openAuth();}}
+function authDone(d){
+  takeAcct(d);authBusy=false;closeSheet();render();
+  const after=authAfter;authAfter='';
+  toast(after==='pick'?'You\'re in. Now choose your statement.':'You\'re signed in');
+  if(d.subToken)refreshPlan();
+  maybeFlush();
+}
+const maybeFlush=()=>{if((P.pendingTrial||0)>0)flushTrial().then(()=>render());};
+function submitAuth(){
+  const v=id=>{const el=$('#'+id);return el?el.value.trim():'';};
+  const email=v('auEmail')||authDraft.email,pw=$('#auPw')?$('#auPw').value:'',code=v('auCode');
+  authDraft.email=email;
+  if(authMode==='signup'){
+    if(!$('#auAgree').checked){authErr='Please tick the box to agree to the terms and privacy policy.';openAuth();return;}
+    return authRun(async()=>{await acctApi('signup',{email,password:pw,agree:true});authMode='code';authInfo='';});
+  }
+  if(authMode==='login')return authRun(async()=>{const d=await acctApi('login',{email,password:pw});if(d.needVerify){authMode='code';authInfo='';}else authDone(d);});
+  if(authMode==='code')return authRun(async()=>authDone(await acctApi('verify',{email,code})));
+  if(authMode==='forgot')return authRun(async()=>{await acctApi('forgot',{email});authMode='reset';authInfo=`If there is an account for ${email}, we sent a 6-digit code to it.`;});
+  if(authMode==='reset')return authRun(async()=>authDone(await acctApi('reset',{email,code,password:pw})));
+}
+function delHTML(){return`<form id="delSheet" class="stack" data-form="acct-del" novalidate><button class="btn q sm x" type="button" data-act="close" aria-label="Close">${ic('x')}</button><h2>Delete your account?</h2><p class="small">This removes your email, password and sign-ins from our server. It can't be undone. Your statements stay on this device until you delete them in Privacy &amp; data. To stop anyone getting a second free trial by re-registering, we keep only your trial start date and upload count. Any Ledger Plus payment records we must keep for accounting stay on file.</p><label class="f" for="delPw">Your password<input type="password" id="delPw" autocomplete="current-password" required></label>${authErr?`<div class="status err" role="alert">${esc(authErr)}</div>`:''}<button class="btn" type="submit">Delete my account</button></form>`;}
+function logoutAcct(){
+  const a=P.acct;P.acct=null;P.id=undefined;P.token=undefined;P.sub=undefined;P.pendingTrial=0;P.pendingUse=0;savePlan();
+  if(a)acctApi('logout',{k:a.k,token:a.token}).catch(()=>{});
+  closeSheet();render();toast('You\'re signed out. Your statements stay on this device.');
 }
 
 /* ---------- plan sheet ---------- */
@@ -581,7 +675,7 @@ function planHTML(reason){
     <p class="small muted">Step 1 of 3. Tell us who's paying so we can match your transfer.</p>
     <label class="f" for="plName">Full name, as on your bank account<input type="text" id="plName" autocomplete="name" maxlength="80" required value="${esc(planDraft.name)}"></label>
     <label class="f" for="plPhone">Phone number (WhatsApp if you have it)<input type="tel" id="plPhone" autocomplete="tel" inputmode="tel" placeholder="0803 123 4567" required value="${esc(planDraft.phone)}"></label>
-    <label class="f" for="plEmail">Email, for your receipt confirmation and renewal reminders<input type="email" id="plEmail" autocomplete="email" inputmode="email" maxlength="120" required value="${esc(planDraft.email)}"></label>
+    ${signedIn()?`<p class="small">Receipts and reminders go to <b>${esc(P.acct.email)}</b>, your confirmed account email.</p>`:`<label class="f" for="plEmail">Email, for your receipt confirmation and renewal reminders<input type="email" id="plEmail" autocomplete="email" inputmode="email" maxlength="120" required value="${esc(planDraft.email)}"></label>`}
     <label class="checkrow" for="plAgree"><input type="checkbox" id="plAgree"><span>I agree to the <a href="terms.html" target="_blank" rel="noopener">terms</a> and <a href="privacy.html" target="_blank" rel="noopener">privacy policy</a>, including Ledger keeping my name, phone number, email and payment receipt to verify my subscription.</span></label>
     ${err}${busy}
     <button class="btn" type="submit" ${planBusy?'disabled':''}>Continue</button>
@@ -679,6 +773,11 @@ function planBanner(){
   if(planExpired()&&!s.pending)return`<div class="banner"><p><b>Ledger Plus ended on ${fmtLong(s.end)}.</b> Your data is still here. Renew for ${priceTxt()} to upload new statements.</p><div class="row"><button class="btn sm" data-act="plan-renew">Renew</button></div></div>`;
   if(s.status==='rejected'&&!planActive())return`<div class="banner"><p><b>We couldn't verify your payment.</b> ${esc(s.rejectedReason||'')}</p><div class="row"><button class="btn sm" data-act="plan-renew">See details</button></div></div>`;
   return'';
+}
+function accountCard(){
+  if(IN_VIEWER)return'';
+  if(signedIn())return`<section class="card" id="account"><div class="head"><div><h2>Your account</h2><p class="muted small">${esc(P.acct.email)}</p></div><span class="chip good">Signed in</span></div><p class="small muted" style="margin-top:8px">Your free trial and Ledger Plus belong to this account, so they work on any phone. Your statements and transactions stay on this device only.</p><div class="row" style="margin-top:10px"><button class="btn q sm" data-act="logout">Log out</button><button class="btn link" data-act="acct-del-ask">Delete account</button></div></section>`;
+  return`<section class="card" id="account"><div class="head"><div><h2>Create your free account</h2><p class="muted small">Needed to upload a statement. It takes a minute: email, a code, then a password. Your ${PLAN.trialDays}-day trial starts with your first statement.</p></div></div><div class="row" style="margin-top:10px"><button class="btn sm" data-act="auth-open-signup">Create account</button><button class="btn q sm" data-act="auth-open">Log in</button></div></section>`;
 }
 function planCard(){
   const s=P.sub||{};
@@ -1605,14 +1704,17 @@ ${coachContext(A)}`;
 }
 async function serverCoach(summary,messages,signal){
   let res;
-  try{res=await fetch(COACH_API,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({summary,messages}),signal});}
+  try{res=await fetch(COACH_API,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({summary,messages,k:P.acct&&P.acct.k,token:P.acct&&P.acct.token}),signal});}
   catch(e){if(e&&e.name==='AbortError')throw{code:'cancelled'};throw{code:navigator.onLine===false?'offline':'upstream_error'};}
   let data={};try{data=await res.json();}catch(e){}
   if(res.ok&&data.text)return data.text;
+  if(res.status===401){P.acct=null;savePlan();throw{code:'login'};}
+  if(res.status===402){refreshAcct();throw{code:'trial_over'};}
   throw{code:res.status===429?'rate_limited':res.status===503||res.status===404?'not_granted':res.status===400?'refused':'upstream_error'};
 }
 async function ask(q){
   const A=getA();if(!A||chatBusy||!q.trim())return;
+  if(!IN_VIEWER&&!signedIn()){openAuth('login','');return;}
   if(IN_VIEWER&&!sampleFn){toast("The AI coach isn't available here.");return;}
   chat.push({role:'user',content:q.trim()});chatDraft='';chatBusy=true;liveText='';render();
   const t=todayISO();if(!S.coachDays[t]){S.coachDays[t]=1;addXP(15,'Asked your coach');award('coach');save();}
@@ -1627,6 +1729,8 @@ async function ask(q){
     const code=e&&e.code;
     if(code==='cancelled'){if(e.text)chat.push({role:'assistant',content:e.text});}
     else if(['not_granted','sampling_disabled','not_declared','capability_disabled','capability_removed'].includes(code)){sampleState='none';chat.push({role:'assistant',content:"Your coach can't answer in this view. The coach feed on Home still works.",err:true});}
+    else if(code==='login'){chat.push({role:'assistant',content:'Please log in to use your coach.',err:true});setTimeout(()=>openAuth('login',''),300);}
+    else if(code==='trial_over'){chat.push({role:'assistant',content:'Your free trial has ended. Subscribe to Ledger Plus to keep using the coach.',err:true});setTimeout(()=>openPlan('limit'),300);}
     else chat.push({role:'assistant',content:code==='rate_limited'?'You have asked a lot of questions in a short time. Try again in a little while.':code==='offline'?"You're offline. Your coach needs internet to answer; everything else in Ledger works offline.":code==='session_expired'?'Sign in to Claude again to keep chatting.':code==='refused'?"I can't help with that one. Try asking another way.":(e&&e.text?e.text+'\n\n(Interrupted. Try again.)':'Something went wrong on the way. Try again.'),err:true});
   }finally{chatBusy=false;liveText='';chatCtl=null;if(tab==='coach')render();}
 }
@@ -1641,6 +1745,7 @@ function viewMe(){
   const moods=Object.values(S.checkins);const tense=moods.filter(c=>c.mood==='tense'),tenseLot=tense.filter(c=>c.spend==='lot').length;
   const c=S.consent;
   return`<div class="stack">
+  ${accountCard()}
   ${planCard()}
   <div class="grid2">
    <section class="card"><div class="head"><div><h2>Level ${lv.n}: ${lv.name}</h2><p class="muted small">${S.xp} XP${nx?` · ${nx.xp-S.xp} XP to ${nx.name}`:' · top level reached'}</p></div><span class="chip warn">${ic('star')}${S.xp} XP</span></div>
@@ -1863,6 +1968,11 @@ const ACT={
   manual:()=>{if(!S.consent.read)openConsent(openManual);else openManual();},
   'pw-cancel':()=>{pendingFile=null;setU({});},
   'set-sample':(a)=>setSample(+a,true),
+  'auth-open':()=>openAuth('login',''),
+  'auth-open-signup':()=>openAuth('signup',''),
+  'auth-mode':(m)=>{if(m==='resend'){authRun(async()=>{await acctApi('resend',{email:authDraft.email});authInfo=`We sent a new code to ${authDraft.email}.`;});return;}authErr='';authInfo='';authMode=m;openAuth();},
+  'logout':()=>logoutAcct(),
+  'acct-del-ask':()=>{authErr='';openSheet(delHTML());},
   'clear-demo':()=>{S.demo=false;save();dataVer++;render();},
   'load-demo':()=>{if(S.txns.length){toast('Your own data is loaded. Remove it first to view the sample.');return;}S.demo=true;revealNext=true;save();dataVer++;render();},
   'rm-stmt':id=>{S.txns=S.txns.filter(t=>t.src!==id);S.statements=S.statements.filter(s=>s.id!==id);if(S.txns.length&&!S.txns.some(t=>(t.cur||'NGN')===S.cur))S.cur=S.txns[0].cur||'NGN';toast('Statement removed from this device');U={};onDataChanged();},
@@ -1926,15 +2036,18 @@ document.addEventListener('keydown',e=>{
   const d=e.target.closest&&e.target.closest('.drop');if(d&&(e.key==='Enter'||e.key===' ')){e.preventDefault();ACT.pick();}
   if(e.target.id==='chatIn'&&e.key==='Enter'&&!e.shiftKey){e.preventDefault();ask(chatDraft);}
 });
+CHANGE['auth-show']=(a,el)=>{const p=$('#auPw');if(p)p.type=el.checked?'text':'password';};
 document.addEventListener('change',e=>{const el=e.target.closest('[data-change]');if(el&&CHANGE[el.dataset.change])CHANGE[el.dataset.change](el.dataset.arg,el);});
 document.addEventListener('input',e=>{const k=e.target.dataset&&e.target.dataset.input;if(k==='paste')pasteDraft=e.target.value;if(k==='chat')chatDraft=e.target.value;});
 document.addEventListener('submit',e=>{e.preventDefault();const f=e.target.dataset.form;
   if(f==='pw'){const pw=$('#pwIn').value;if(pendingFile&&pw)ingestFile(pendingFile,pw);}
   if(f==='chat')ask(chatDraft);
   if(f==='manual')submitManual();
-  if(f==='plan-start'){planDraft={name:$('#plName').value,phone:$('#plPhone').value,email:$('#plEmail').value};
+  if(f==='auth')submitAuth();
+  if(f==='acct-del'){const pw=$('#delPw').value;acctApi('delete',{k:P.acct.k,token:P.acct.token,password:pw}).then(()=>{P.acct=null;P.id=undefined;P.token=undefined;P.sub=undefined;P.pendingTrial=0;savePlan();closeSheet();render();toast('Your account was deleted');}).catch(e=>{authErr=e.message;openSheet(delHTML());});}
+  if(f==='plan-start'){planDraft={name:$('#plName').value,phone:$('#plPhone').value,email:$('#plEmail')?$('#plEmail').value:(P.acct&&P.acct.email)||''};
     if(!$('#plAgree').checked){planErr='Please tick the box to agree to the terms and privacy policy.';openPlan();return;}
-    planRun('Setting up…',async()=>{takeSub(await subApi('start',{...planDraft,agree:true}));planView='pay';});}
+    planRun('Setting up…',async()=>{takeSub(await subApi('start',signedIn()?{name:planDraft.name,phone:planDraft.phone,agree:true,ak:P.acct.k,at:P.acct.token}:{...planDraft,agree:true}));planView='pay';});}
   if(f==='plan-restore'){const id=$('#rsId').value,phone=$('#rsPhone').value;
     planRun('Restoring…',async()=>{takeSub(await subApi('restore',{id,phone}));planView=null;toast(planActive()?'Ledger Plus restored on this phone':'Subscription linked to this phone');});}
 });
@@ -1949,6 +2062,7 @@ expireChallenges();
 if(!S.demo&&!S.txns.length&&S.statements.length){S.statements=[];}
 {const c=localeCurrency();const i=SAMPLES.findIndex(x=>x.cur===c);if(i>=0)sampleIx=i;}
 startSampleTimer();
+if(!IN_VIEWER&&signedIn()){refreshAcct().then(()=>maybeFlush());}
 render();
 if(IN_VIEWER){(async()=>{try{sampleFn=await window.claude.use('sample');}catch(e){sampleFn=null;}sampleState=sampleFn?'ready':'none';if(tab==='coach')render();})();}
 else{

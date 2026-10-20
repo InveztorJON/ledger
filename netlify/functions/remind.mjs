@@ -26,6 +26,7 @@ export async function runReminders(now = Date.now()) {
 
 export default async () => {
   const r = await runReminders();
+  try { const st = await stores(); if (st.sweepRates) r.ratesSwept = await st.sweepRates(); } catch (e) { console.error('rate sweep failed', e && e.name); }
   console.log('reminders', JSON.stringify(r));
   return new Response(JSON.stringify(r), { headers: { 'content-type': 'application/json' } });
 };

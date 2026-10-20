@@ -6,7 +6,8 @@
 //   ANTHROPIC_API_KEY   required. Your key from console.anthropic.com
 //   COACH_MODEL         optional. Defaults to claude-haiku-4-5-20251001 (fast and low cost)
 //   COACH_HOURLY_LIMIT  optional. Questions per person per hour. Default 20
-//   COACH_DAILY_LIMIT   optional. Questions per server instance per day. Default 2000
+//   COACH_DAILY_LIMIT   optional. Questions across everyone per day (shared across servers). Default 1500
+//   COACH_ACCOUNT_DAILY_LIMIT optional. Questions per account per day. Default 40
 //   ANTHROPIC_BASE_URL  optional. Set automatically by Netlify AI Gateway; otherwise Anthropic's API is used directly
 
 const RULES = `You are the coach inside Ledger, a money-habits app for people around the world. You teach and encourage. You are not a licensed financial adviser.
@@ -20,8 +21,9 @@ Rules:
 - Only discuss the user's money, habits and financial education. Politely decline anything unrelated.
 - Plain text only: no headings, no tables. Short dash lists are fine.`;
 
-const hits = new Map();          // ip -> [timestamps]; best effort, per server instance
-let day = '', dayCount = 0;
+import { glimit, clientIp } from '../lib/http.mjs';
+import { stores } from '../lib/store.mjs';
+import { authed, mayCoach } from '../lib/acct.mjs';
 
 const json = (status, body) => new Response(JSON.stringify(body), {
   status, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' }
@@ -69,16 +71,18 @@ export default async (req, context) => {
   const input = clean(body);
   if (!input) return json(400, { error: 'Bad request' });
 
-  // rate limits
-  const now = Date.now(), ip = (context && context.ip) || req.headers.get('x-nf-client-connection-ip') || 'unknown';
-  const hourly = Number(process.env.COACH_HOURLY_LIMIT || 20), daily = Number(process.env.COACH_DAILY_LIMIT || 2000);
-  const recent = (hits.get(ip) || []).filter(t => now - t < 3600e3);
-  if (recent.length >= hourly) return json(429, { error: 'Too many questions' });
-  const today = new Date(now).toISOString().slice(0, 10);
-  if (today !== day) { day = today; dayCount = 0; }
-  if (dayCount >= daily) return json(429, { error: 'Coach is busy today' });
-  recent.push(now); hits.set(ip, recent); dayCount++;
-  if (hits.size > 5000) hits.clear();
+  // Only a signed-in account with a running trial or paid plan may use the coach, and every limit is counted in shared
+  // storage so it holds across all servers and all networks.
+  let st; try { st = await stores(); } catch (e) { return json(503, { error: 'Coach is unavailable right now' }); }
+  const acct = await authed(st, body);
+  if (!acct) return json(401, { error: 'Please log in to use your coach.' });
+  if (!(await mayCoach(st, acct))) return json(402, { error: 'Your free trial has ended. Subscribe to Ledger Plus to keep using the coach.' });
+  const ip = clientIp(req, context);
+  const hourly = Number(process.env.COACH_HOURLY_LIMIT || 20), daily = Number(process.env.COACH_ACCOUNT_DAILY_LIMIT || 40), globalDaily = Number(process.env.COACH_DAILY_LIMIT || 1500);
+  if (!(await glimit(st, 'coach-ip', ip, hourly * 3))) return json(429, { error: 'Too many questions from this network' });
+  if (!(await glimit(st, 'coach-hour', acct.key, hourly))) return json(429, { error: 'Too many questions' });
+  if (!(await glimit(st, 'coach-day', acct.key, daily, 864e5))) return json(429, { error: "You've reached today's coach limit. It resets tomorrow." });
+  if (!(await glimit(st, 'coach-all', 'all', globalDaily, 864e5))) return json(429, { error: 'Coach is busy today' });
 
   try {
     const base = (process.env.ANTHROPIC_BASE_URL || 'https://api.anthropic.com').replace(/\/+$/, '');

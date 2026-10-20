@@ -32,6 +32,13 @@ async def until(pg, expr, timeout=5000):
         await pg.wait_for_timeout(100)
     raise AssertionError('timed out waiting for ' + expr)
 
+EMAIL = []
+async def signin(pg, email=None):
+    email = email or (EMAIL[0] if EMAIL else None) or f'tester{__import__("time").time_ns()}@example.com'
+    # a confirmed account that is already signed in on this browser (the sign-up screens have their own test)
+    if not EMAIL: EMAIL.append(email)
+    await pg.evaluate("(e)=>fetch('/__mkacct?email='+encodeURIComponent(e)).then(r=>r.json()).then(d=>{takeAcct({k:d.k,token:d.token,email:e,trial:d.trial,subId:null,planActive:false});render();})", email)
+
 async def main():
     async with async_playwright() as p:
         b = await p.chromium.launch(executable_path=CHROME)
@@ -45,6 +52,11 @@ async def main():
         pg.on('console', lambda m: ('Content Security Policy' in m.text or 'Refused' in m.text) and errs.append(m.text))
         await pg.goto(URL + '/'); await pg.wait_for_timeout(800)
         await pg.evaluate("S.consent.read=true;S.consent.store=true;save()")
+        await pg.evaluate("tab='statements';render()")
+        await pg.click('.drop')
+        rec('Uploading without an account opens the sign-up sheet, not the file picker', await pg.locator('#authSheet').count() == 1 and 'Create your Ledger account' in await pg.inner_text('#authSheet'))
+        await pg.evaluate('closeSheet()')
+        await signin(pg)
 
         # --- free trial ---
         rec('New user has a 7-day trial that has not started yet', await pg.evaluate('trialDaysLeft()') == 7 and await pg.evaluate('trialStarted()') == False)
@@ -53,10 +65,12 @@ async def main():
         for k in range(2):
             await pg.set_input_files('#fileIn', statement(k))
             await until(pg, f'S.statements.length==={k + 1}', 5000)
-        rec('2 statements upload during the trial and the clock starts', await pg.evaluate('S.statements.length') == 2 and await pg.evaluate('P.used') == 2 and await pg.evaluate('trialStarted()') == True)
+        rec('2 statements upload during the trial and the clock starts', await pg.evaluate('S.statements.length') == 2 and await pg.evaluate('trialData().used') == 2 and await pg.evaluate('trialStarted()') == True)
+        await until(pg, '(P.pendingTrial||0)===0', 5000)
+        rec('The server (not the browser) holds the trial count', await pg.evaluate("fetch('/api/acct/status',{method:'POST',body:JSON.stringify({k:P.acct.k,token:P.acct.token})}).then(r=>r.json()).then(d=>d.trial.used===2&&d.trial.started)"))
         await pg.evaluate("tab='statements';render()")
         rec('During the trial the panel shows the days left', 'of 7 days' in await pg.inner_text('.planline'))
-        await pg.evaluate("P.trialStart=Date.now()-8*864e5;savePlan();tab='statements';render()")
+        await pg.evaluate("fetch('/__setTrial?k='+P.acct.k+'&daysAgo=8&used=2').then(()=>refreshAcct()).then(()=>{tab='statements';render()})"); await until(pg, 'trialOver()', 4000)
         rec('After 7 days the panel says the free trial ended', 'Free trial ended' in await pg.inner_text('.planline'))
         await pg.evaluate("document.querySelectorAll('.celebrate').forEach(e=>e.remove())")
         await pg.click('.drop')
@@ -75,7 +89,7 @@ async def main():
         await pg.click('#planSheet button[type=submit]')
         await pg.wait_for_timeout(200)
         rec('Needs the agreement tick', 'agree' in (await pg.inner_text('#planSheet')).lower() and await pg.evaluate('!P.id'))
-        await pg.fill('#plName', 'Ada Obi'); await pg.fill('#plPhone', '0803 123 4567'); await pg.fill('#plEmail', 'ada@example.com'); await pg.check('#plAgree')
+        await pg.fill('#plName', 'Ada Obi'); await pg.fill('#plPhone', '0803 123 4567'); await pg.check('#plAgree')
         await pg.click('#planSheet button[type=submit]')
         await pg.wait_for_selector('#planSheet .paybox', timeout=5000)
         t = await pg.inner_text('#planSheet')
@@ -241,16 +255,17 @@ async def main():
         await pg.evaluate("openPlan('full');planView='pay';openPlan()")
         rec('Renew screen says the new month starts straight away', 'as soon as your payment is verified' in await pg.inner_text('#planSheet') and '₦9,000' in await pg.inner_text('#planSheet'))
         await pg.evaluate("closeSheet()")
-        # --- free-trial count survives clearing local storage only ---
+        # --- the trial belongs to the account: a brand-new browser, or a new phone, does not get another one ---
         ctx3 = await b.new_context(viewport={'width': 360, 'height': 780})
         await ctx3.route('**/*', route)
-        await ctx3.add_cookies([{'name': 'ledger_trial', 'value': str(int(__import__('time').time() * 1000) - 8 * 864 * 100000), 'url': URL + '/'}])
         p3 = await ctx3.new_page()
         await p3.goto(URL + '/'); await p3.wait_for_timeout(600)
-        rec('A fresh browser profile that still has the trial cookie gets no new free trial', await p3.evaluate('freeLeft()') == 0 and await p3.evaluate('canUpload()') == False)
+        rec('A fresh browser has no trial and no way to upload until it signs in', await p3.evaluate('signedIn()') is False and await p3.evaluate('trialStarted()') is False)
+        await signin(p3)
+        await until(p3, 'signedIn()', 3000)
+        rec('Signing in on a new browser brings the same (finished) trial, not a new one', await p3.evaluate('freeLeft()') == 0 and await p3.evaluate('canUpload()') == False)
         await ctx3.close()
-        rec('The trial cookie is first-party, SameSite=Strict', any(c['name'] == 'ledger_trial' and c['sameSite'] == 'Strict' for c in await ctx.cookies()))
-        rec('Wipe keeps the subscription', await pg.evaluate("ACT.wipe();!!P.id&&P.used===2"))
+        rec('Wipe keeps the subscription', await pg.evaluate("ACT.wipe();!!P.id&&P.acct&&P.acct.trial.used===2"))
         rec('No JavaScript or security-policy errors', not errs, errs[:3])
         await b.close()
     print(f'{sum(R)}/{len(R)} passed')

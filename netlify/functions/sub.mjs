@@ -8,11 +8,12 @@
 //   restore  {id, phone}                          -> use the subscription on another device; returns a new token
 // Privacy: request bodies are never logged.
 
-import { json, allowedOrigin, clientIp, limit, readJson } from '../lib/http.mjs';
+import { json, allowedOrigin, clientIp, glimit, readJson } from '../lib/http.mjs';
 import { PLAN, newId, newToken, sha256, normPhone, cleanText, validId, publicView, applyUse, usageOf, warnCount } from '../lib/plan.mjs';
 import { stores } from '../lib/store.mjs';
 import { sendMail, validEmail, adminAddress } from '../lib/mail.mjs';
 import * as mail from '../lib/emails.mjs';
+import { authed as acctAuthed } from '../lib/acct.mjs';
 
 const MAX_PROOF = 3.5 * 1024 * 1024;
 const TYPES = {
@@ -36,17 +37,19 @@ export default async (req, context) => {
   if (!allowedOrigin(req)) return json(403, { error: 'Not allowed' });
   const action = new URL(req.url).pathname.split('/').filter(Boolean).pop();
   const ip = clientIp(req, context);
-  if (!limit('sub-all', ip, 120)) return json(429, { error: 'Too many requests. Try again later.' });
-
-  const { body, error } = await readJson(req, action === 'proof' ? 5.2 * 1024 * 1024 : 4000);
-  if (error) return error;
   let st;
   try { st = await stores(); } catch (e) { console.error('store unavailable', e && e.name); return json(503, { error: 'Subscriptions are unavailable right now. Try again soon.' }); }
+  if (!(await glimit(st, 'sub-all', ip, 120))) return json(429, { error: 'Too many requests. Try again later.' });
+  const { body, error } = await readJson(req, action === 'proof' ? 5.2 * 1024 * 1024 : 4000);
+  if (error) return error;
 
   try {
     if (action === 'start') {
-      if (!limit('sub-start', ip, 8)) return json(429, { error: 'Too many sign-ups from this network. Try again later.' });
-      const name = cleanText(body.name, 80), phone = normPhone(body.phone), email = cleanText(body.email, 120);
+      if (!(await glimit(st, 'sub-start', ip, 8))) return json(429, { error: 'Too many sign-ups from this network. Try again later.' });
+      // Signed in: the subscription uses the account's confirmed email, so a card payment can only ever match its real owner.
+      const acct = body.ak ? await acctAuthed(st, { k: body.ak, token: body.at }) : null;
+      if (body.ak && !acct) return json(401, { error: 'Please log in again.' });
+      const name = cleanText(body.name, 80), phone = normPhone(body.phone), email = acct ? acct.email : cleanText(body.email, 120);
       if (name.length < 3) return json(400, { error: 'Enter your full name as it appears on your bank account.' });
       if (!phone) return json(400, { error: 'Enter a Nigerian phone number, like 0803 123 4567.' });
       if (!validEmail(email)) return json(400, { error: 'Enter a valid email address. We send your receipt confirmation and renewal reminders there.' });
@@ -55,12 +58,13 @@ export default async (req, context) => {
       const token = newToken();
       const rec = { id, name, phone, email, createdAt: new Date().toISOString(), agreedAt: new Date().toISOString(), end: null, cancelAtEnd: false, periods: [], proofs: [], tokens: [] };
       await addToken(rec, token);
-      await st.putSub(rec);
+      if (acct) { rec.acctKey = acct.key; await st.putSub(rec); acct.subId = id; await st.putAcct(acct); }
+      else await st.putSub(rec);
       return json(200, { token, ...publicView(rec) });
     }
 
     if (action === 'restore') {
-      if (!limit('sub-restore', ip, 6)) return json(429, { error: 'Too many tries. Try again in an hour.' });
+      if (!(await glimit(st, 'sub-restore', ip, 6))) return json(429, { error: 'Too many tries. Try again in an hour.' });
       const id = String(body.id || '').toUpperCase().replace(/\s/g, '').replace(/^LDG(?!-)/, 'LDG-');
       const phone = normPhone(body.phone);
       const rec = validId(id) && phone ? await st.getSub(id) : null;
@@ -108,7 +112,7 @@ export default async (req, context) => {
     }
 
     if (action === 'proof') {
-      if (!limit('sub-proof', rec.id, 6, 864e5)) return json(429, { error: 'Too many uploads today. Contact us if you need help.' });
+      if (!(await glimit(st, 'sub-proof', rec.id, 6, 864e5))) return json(429, { error: 'Too many uploads today. Contact us if you need help.' });
       const f = body.file || {};
       const check = TYPES[f.type];
       if (!check || typeof f.data !== 'string') return json(400, { error: 'Upload a photo, screenshot or PDF of your receipt.' });
@@ -123,7 +127,7 @@ export default async (req, context) => {
       rec.proofs = rec.proofs.slice(-24);
       rec.cancelAtEnd = false;
       await st.putSub(rec);
-      if (limit('proof-mail', String(rec.email).toLowerCase(), 3, 864e5)) await sendMail(mail.receiptReceived(rec));
+      if (await glimit(st, 'proof-mail', String(rec.email).toLowerCase(), 3, 864e5)) await sendMail(mail.receiptReceived(rec));
       if (adminAddress()) await sendMail(mail.adminNewProof(rec, adminAddress()));
       return json(200, publicView(rec));
     }

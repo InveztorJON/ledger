@@ -31,7 +31,9 @@ async def main():
         rec('Service worker installs and activates', sw)
         await pg.reload(); await pg.wait_for_timeout(800)
         rec('Page controlled by service worker after reload', await pg.evaluate('!!navigator.serviceWorker.controller'))
-        # coach e2e through the server function
+        # coach e2e through the server function (needs a signed-in account with a running trial)
+        await pg.evaluate("(e)=>fetch('/__mkacct?email='+e).then(r=>r.json()).then(d=>{takeAcct({k:d.k,token:d.token,email:e,trial:{start:Date.now(),used:1},subId:null,planActive:false});})", f'pwa{os.getpid()}@example.com')
+        await pg.evaluate("fetch('/__setTrial?k='+P.acct.k+'&daysAgo=0&used=1')")
         await pg.evaluate("tab='coach';render()")
         await pg.click('[data-act="ai-on"]')
         await pg.fill('#chatIn', 'Where is my money leaking?')

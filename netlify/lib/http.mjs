@@ -27,6 +27,20 @@ export function limit(name, key, max, windowMs = 3600e3) {
   return true;
 }
 
+// Shared limiter: counts in Netlify Blobs so every server instance agrees. Returns true if allowed. Falls back to the
+// per-instance limiter only where no shared store exists (tests). A failed request still counts, which is what we want from an abuser.
+export async function glimit(st, name, key, max, windowMs = 3600e3) {
+  if (st && st.hit) {
+    try { return (await st.hit(name, key, windowMs, true)) <= max; }
+    catch (e) { console.error('rate store failed', e && e.name); return false; }   // if we can't count, we refuse rather than allow unlimited
+  }
+  return limit(name, key, max, windowMs);
+}
+export async function gblocked(st, name, key, max, windowMs = 3600e3) {
+  if (st && st.hit) { try { return (await st.hit(name, key, windowMs, false)) >= max; } catch { return true; } }
+  return blocked(name, key, max, windowMs);
+}
+
 // True if the bucket is already full (does not record a hit).
 export function blocked(name, key, max, windowMs = 3600e3) {
   const now = Date.now();
