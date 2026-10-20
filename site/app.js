@@ -359,12 +359,12 @@ const DR=[
  ['Health',/pharmac|hospital|clinic|medplus|\bhmo\b|health|\blab\b|diagnost|dental|optical|cvs|walgreens|boots|doctor|physio|medical|insurance|apotheke|farmacia/],
  ['Education',/school|tuition|university|college|\bwaec\b|\bjamb\b|\bneco\b|course|udemy|coursera|\bexam|academy|student|textbook/],
  ['Giving & tithes',/tithe|offering|church|chapel|mosque|zakat|donation|charity|ministry|gofundme|red cross|unicef|kollekte/],
- ['Rent & housing',/\brent\b|landlord|house rent|apartment|caution fee|agency fee|mortgage|miete|loyer|alquiler|property tax|\bhoa\b|lease/],
+ ['Rent & housing',/\brent\b|landlord|house rent|apartment|caution fee|agency fee|mortgage|miete|loyer|alquiler|aluguel|property tax|\bhoa\b|lease/],
  ['Cash withdrawals',/\batm\b|cash wd|cash withdrawal|\bwdl\b|withdrawal|cash out|cash advance|geldautomat|retrait|retiro/],
  ['Transfers to people',/trf to|transfer to|\bnip\b|\btrf\b|transfer|\bto\b/]
 ];
 const CR=[
- ['Salary & income',/salary|\bsal\b|payroll|wages|stipend|allowance|bonus|dividend|interest|direct dep|gehalt|salaire|sueldo|\blohn\b|\bpaye\b|pension|benefit|tax refund/],
+ ['Salary & income',/salary|sal[aá]rio|\bsal\b|payroll|wages|stipend|allowance|bonus|dividend|interest|direct dep|gehalt|salaire|sueldo|\blohn\b|\bpaye\b|pension|benefit|tax refund/],
  ['Betting',new RegExp(BETS)],
  ['Savings & investing',/saving|piggyvest|cowrywise|risevest|bamboo|trove|safelock|\bvault\b|target sav|\binvest|autosave/],
  ['Refunds',/reversal|\brvsl\b|refund|reversed|chargeback|cashback|storno|remboursement|reembolso|erstattung/]
@@ -381,43 +381,74 @@ function merchantKey(desc){
 let idSeq=0;
 function enrich(t,src){const credit=t.amt>0;const cat=categorize(t.desc,credit);return{id:src+'-'+(idSeq++).toString(36)+Math.random().toString(36).slice(2,6),date:t.date,desc:t.desc,amt:Math.round(t.amt*100)/100,cat,type:typeOf(cat,credit),mk:merchantKey(t.desc),src,tagged:false,cur:CUR};}
 
-/* ================= sample statement (fictional) ================= */
-function makeSample(){
+/* ================= sample statements (fictional, one per featured currency) ================= */
+// Each sample is a made-up person. Amounts are written in naira-sized units then scaled by `k` into that currency's own scale (never an FX conversion).
+const SAMPLES=[
+ {cur:'NGN',name:'Tolu',place:'Lagos',job:'professional',code:'NG',k:1,fe:[50,26.88,10.75,null,50],
+  emp:'NIP CR/SALARY/ACME LOGISTICS LTD',levy:'ELECTRONIC MONEY TRANSFER LEVY',rent:'NIP TRF TO MRS ADUNNI BELLO/RENT',tfee:'NIP TRF CHARGE + VAT',fam:'NIP TRF TO IFEOMA OKAFOR/MUM UPKEEP',fam2:'NIP TRF TO CHINEDU OKAFOR',save:'TARGET SAVINGS AUTOSAVE',loan:'CASHLITE LOAN REPAYMENT',ecom:'WEB PURCHASE JUMIA NG',shop:'POS PURCHASE SHOPRITE LEKKI',out:'POS PURCHASE THE PLACE LEKKI',sms:'SMS ALERT CHARGES',card:'CARD MAINTENANCE FEE',subs:['NETFLIX.COM','SPOTIFY','SHOWMAX'],sb:[7000,1700,3500],bills:'IKEDC PREPAID TOKEN',give:'TRF TO GRACE CHAPEL/TITHE',atm:'ATM WDL LEKKI PHASE 1',data:'MTN DATA BUNDLE',air:'AIRTIME PURCHASE MTN',deliv:['CHOWDECK ORDER','GLOVO NG','POS PURCHASE CHICKEN REPUBLIC'],ride:['BOLT RIDE','UBER TRIP'],eat:'POS PURCHASE BUKKA HUT',bet:'SPORTYBET WALLET FUNDING',betw:'SPORTYBET WITHDRAWAL'},
+ {cur:'USD',name:'Maya',place:'Austin',job:'marketing manager',code:'US',k:0.01,fe:[25,12,12,12,12],
+  emp:'ACH CREDIT PAYROLL BRIGHTPATH INC',levy:'WIRE FEE',rent:'ZELLE PAYMENT TO LANDLORD RENT',tfee:'WIRE FEE',fam:'ZELLE TO MOM',fam2:'VENMO TO JAMAL',save:'AUTOMATIC SAVINGS TRANSFER',loan:'STUDENT LOAN PAYMENT',ecom:'AMAZON MKTPLACE',shop:'WALMART SUPERCENTER',out:'RESTAURANT AUSTIN GRILL',sms:'SERVICE FEE',card:'MONTHLY ACCOUNT FEE',subs:['NETFLIX.COM','SPOTIFY USA','HULU'],sb:[16,11,18],bills:'AUSTIN ENERGY ELECTRIC',give:'DONATION RED CROSS',atm:'ATM WITHDRAWAL',data:'T-MOBILE MONTHLY',air:'CELLULAR PREPAID REFILL',deliv:['DOORDASH ORDER','GRUBHUB ORDER','DOMINOS PIZZA'],ride:['LYFT RIDE','UBER TRIP'],eat:'STARBUCKS',bet:'ONLINE BETTING DEPOSIT',betw:'ONLINE BETTING WITHDRAWAL'},
+ {cur:'GBP',name:'Oliver',place:'Manchester',job:'project coordinator',code:'GB',k:0.0075,fe:[15,8,8,6,6],
+  emp:'BGC SALARY NORTHGATE DIGITAL LTD',levy:'ACCOUNT FEE',rent:'FPO RENT LANDLORD',tfee:'ACCOUNT FEE',fam:'FASTER PAYMENT TO MUM',fam2:'FASTER PAYMENT TO HANNAH',save:'CASH ISA SAVINGS',loan:'KLARNA REPAYMENT',ecom:'AMAZON.CO.UK',shop:'TESCO STORES',out:'THE KINGS ARMS RESTAURANT',sms:'SERVICE FEE',card:'MONTHLY ACCOUNT FEE',subs:['NETFLIX.COM','SPOTIFY UK','DISNEY PLUS'],sb:[11,11,8],bills:'BRITISH GAS',give:'DONATION OXFAM',atm:'LINK ATM WITHDRAWAL',data:'VODAFONE DATA',air:'VODAFONE TOP UP MOBILE',deliv:['DELIVEROO ORDER','JUST EAT ORDER','DOMINOS PIZZA'],ride:['UBER TRIP','BOLT RIDE'],eat:'COSTA CAFE',bet:'ONLINE BETTING DEPOSIT',betw:'ONLINE BETTING WITHDRAWAL'},
+ {cur:'EUR',name:'Lena',place:'Berlin',job:'software tester',code:'DE',k:0.008,fe:[12,6,6,5,5],
+  emp:'GEHALT NORDLICHT SOFTWARE GMBH',levy:'KONTOFUEHRUNG ACCOUNT FEE',rent:'DAUERAUFTRAG MIETE VERMIETER',tfee:'ACCOUNT FEE',fam:'TRANSFER TO MUTTER',fam2:'TRANSFER TO JONAS',save:'SPARPLAN ETF',loan:'DARLEHEN RATE',ecom:'AMAZON.DE',shop:'REWE MARKT',out:'RESTAURANT ZUR LINDE',sms:'SERVICE FEE',card:'KONTOFUEHRUNG ACCOUNT FEE',subs:['NETFLIX.COM','SPOTIFY AB','DAZN'],sb:[13,10,15],bills:'VATTENFALL STROM ELECTRIC',give:'SPENDE DONATION',atm:'GELDAUTOMAT ABHEBUNG',data:'TELEKOM DATA',air:'MOBILE TOP UP O2',deliv:['WOLT ORDER','LIEFERANDO RESTAURANT','DOMINOS PIZZA'],ride:['BOLT RIDE','BAHN TICKET'],eat:'BAECKEREI CAFE',bet:'ONLINE BETTING DEPOSIT',betw:'ONLINE BETTING WITHDRAWAL'},
+ {cur:'ZAR',name:'Thabo',place:'Johannesburg',job:'operations officer',code:'ZA',k:0.083,fe:[60,30,30,25,69],
+  emp:'CREDIT SALARY ASTERIX LOGISTICS',levy:'MONTHLY ACCOUNT FEE',rent:'EFT RENT LANDLORD',tfee:'SERVICE FEE',fam:'PAYSHAP TO MAMA',fam2:'EFT TO SIPHO',save:'TAX FREE SAVINGS',loan:'LOAN REPAYMENT CAPITEC',ecom:'TAKEALOT.COM',shop:'CHECKERS HYPER',out:'SPUR RESTAURANT SANDTON',sms:'SMS NOTIFICATION FEE',card:'MONTHLY ACCOUNT FEE',subs:['NETFLIX.COM','SPOTIFY','SHOWMAX'],sb:[199,60,99],bills:'ESKOM PREPAID ELECTRICITY',give:'CHURCH OFFERING',atm:'ATM WITHDRAWAL',data:'VODACOM DATA',air:'VODACOM AIRTIME',deliv:['MR D FOOD','KFC SANDTON','NANDOS RESTAURANT'],ride:['BOLT RIDE','UBER TRIP'],eat:'VIDA E CAFFE CAFE',bet:'ONLINE BETTING DEPOSIT',betw:'ONLINE BETTING WITHDRAWAL'},
+ {cur:'KES',name:'Wanjiru',place:'Nairobi',job:'accountant',code:'KE',k:0.29,fe:[110,30,30,20,100],
+  emp:'SALARY SAFARI TECH LTD',levy:'MPESA TRANSACTION CHARGE',rent:'RENT PAYMENT LANDLORD',tfee:'MPESA TRANSACTION CHARGE',fam:'MPESA SEND TO MAMA',fam2:'MPESA SEND TO KAMAU',save:'MSHWARI SAVINGS',loan:'LOAN REPAYMENT TALA',ecom:'JUMIA KENYA',shop:'NAIVAS SUPERMARKET',out:'JAVA HOUSE RESTAURANT',sms:'SMS ALERT CHARGE',card:'CARD MAINTENANCE FEE',subs:['NETFLIX.COM','SPOTIFY','SHOWMAX'],sb:[1100,600,900],bills:'KENYA POWER PREPAID TOKEN',give:'TITHE CHURCH',atm:'ATM WITHDRAWAL',data:'SAFARICOM DATA BUNDLE',air:'SAFARICOM AIRTIME',deliv:['GLOVO KE','JUMIA FOOD','KFC NAIROBI'],ride:['BOLT RIDE','UBER TRIP'],eat:'JAVA HOUSE CAFE',bet:'SPORTYBET WALLET FUNDING',betw:'SPORTYBET WITHDRAWAL'},
+ {cur:'GHS',name:'Kofi',place:'Accra',job:'engineer',code:'GH',k:0.0214,fe:[5,2,2,1,5],
+  emp:'SALARY GOLDCOAST ENERGY LTD',levy:'E-LEVY CHARGE',rent:'RENT PAYMENT LANDLORD',tfee:'MOMO TRANSACTION CHARGE',fam:'MOMO TRANSFER TO MAAME',fam2:'MOMO TRANSFER TO KWAME',save:'SUSU SAVINGS',loan:'LOAN REPAYMENT',ecom:'JUMIA GHANA',shop:'MELCOM SUPERMARKET',out:'CHOP BAR RESTAURANT',sms:'SMS ALERT CHARGE',card:'CARD MAINTENANCE FEE',subs:['NETFLIX.COM','SPOTIFY','DSTV'],sb:[90,30,110],bills:'ECG PREPAID ELECTRICITY',give:'TITHE CHURCH',atm:'ATM WITHDRAWAL',data:'MTN DATA BUNDLE',air:'AIRTIME MTN',deliv:['GLOVO GH','KFC ACCRA','CHOP BAR FOOD'],ride:['BOLT RIDE','UBER TRIP'],eat:'CAFE AFRIK',bet:'SPORTYBET WALLET FUNDING',betw:'SPORTYBET WITHDRAWAL'},
+ {cur:'EGP',name:'Omar',place:'Cairo',job:'sales executive',code:'EG',k:0.052,fe:[10,5,5,3,15],
+  emp:'SALARY NILE TELECOM',levy:'INSTAPAY FEE',rent:'RENT PAYMENT LANDLORD',tfee:'INSTAPAY FEE',fam:'INSTAPAY TRANSFER TO MAMA',fam2:'INSTAPAY TRANSFER TO ALI',save:'SAVINGS CERTIFICATE',loan:'LOAN REPAYMENT',ecom:'AMAZON.EG',shop:'CARREFOUR MAADI',out:'RESTAURANT ZAMALEK',sms:'SMS ALERT CHARGE',card:'CARD MAINTENANCE FEE',subs:['NETFLIX.COM','ANGHAMI SUBSCRIPTION','SHAHID SUBSCRIPTION'],sb:[170,70,150],bills:'ELECTRICITY BILL CAIRO',give:'ZAKAT DONATION',atm:'ATM WITHDRAWAL',data:'VODAFONE DATA',air:'ORANGE AIRTIME',deliv:['TALABAT RESTAURANT','ELMENUS RESTAURANT','KFC CAIRO'],ride:['UBER TRIP','CAREEM RIDE'],eat:'CAFE',bet:'ONLINE BETTING DEPOSIT',betw:'ONLINE BETTING WITHDRAWAL'},
+ {cur:'INR',name:'Priya',place:'Bengaluru',job:'product analyst',code:'IN',k:0.167,fe:[25,10,10,15,200],
+  emp:'NEFT SALARY BYTEWAVE TECHNOLOGIES',levy:'IMPS CHARGE',rent:'UPI RENT LANDLORD',tfee:'IMPS CHARGE',fam:'UPI TRANSFER TO AMMA',fam2:'UPI TRANSFER TO KARTHIK',save:'SIP MUTUAL FUND INVEST',loan:'LOAN EMI REPAYMENT',ecom:'AMAZON.IN',shop:'BIGBASKET SUPERMARKET',out:'RESTAURANT INDIRANAGAR',sms:'SMS ALERT CHARGE',card:'CARD MAINTENANCE FEE',subs:['NETFLIX.COM','SPOTIFY','HOTSTAR SUBSCRIPTION'],sb:[649,119,299],bills:'BESCOM ELECTRICITY',give:'TEMPLE DONATION',atm:'ATM WITHDRAWAL',data:'JIO DATA RECHARGE',air:'AIRTEL RECHARGE',deliv:['SWIGGY FOOD','ZOMATO FOOD','DOMINOS PIZZA'],ride:['UBER TRIP','BANGALORE METRO'],eat:'CAFE COFFEE DAY',bet:'ONLINE BETTING DEPOSIT',betw:'ONLINE BETTING WITHDRAWAL'},
+ {cur:'BRL',name:'Lucas',place:'São Paulo',job:'designer',code:'BR',k:0.0155,fe:[10,5,5,6,12],
+  emp:'PIX SALARIO NOVA ERA COMERCIO',levy:'TARIFA PIX',rent:'PIX ALUGUEL LOCADOR',tfee:'TARIFA PIX',fam:'PIX TRANSFER TO MAE',fam2:'PIX TRANSFER TO JOAO',save:'POUPANCA SAVINGS',loan:'LOAN REPAYMENT',ecom:'AMAZON.COM.BR',shop:'CARREFOUR BAIRRO',out:'RESTAURANTE PINHEIROS',sms:'SMS ALERT CHARGE',card:'MONTHLY ACCOUNT FEE',subs:['NETFLIX.COM','SPOTIFY','GLOBOPLAY SUBSCRIPTION'],sb:[45,22,30],bills:'ENEL ELECTRIC',give:'DONATION IGREJA',atm:'ATM WITHDRAWAL',data:'VIVO DATA',air:'TIM AIRTIME',deliv:['IFOOD RESTAURANT','RAPPI RESTAURANT','MCDONALDS'],ride:['UBER TRIP','99 TAXI'],eat:'PADARIA CAFE',bet:'BETANO DEPOSIT',betw:'BETANO WITHDRAWAL'}
+];
+function makeSample(p){
   const rnd=mulberry32(20260925);
+  const k=p.k;
   const R=(a,b)=>Math.round((a+rnd()*(b-a))/50)*50;
-  const out=[];let bal=300000;
-  const add=(iso,desc,amt,optional)=>{if(optional&&amt<0&&bal+amt<5000)return;bal+=amt;out.push({date:iso,desc,amt,balance:Math.round(bal*100)/100});};
+  const L=n=>{const v=Math.abs(n)*k;const st=v>=3000?50:v>=300?5:v>=30?1:0.5;return Math.max(st,Math.round(v/st)*st)*Math.sign(n);};
+  const out=[];let bal=Math.round(300000*k);
+  const add=(iso,desc,amt,optional)=>{if(optional&&amt<0&&bal+amt<5000*k)return;bal+=amt;out.push({date:iso,desc,amt,balance:Math.round(bal*100)/100});};
+  const fe=p.fe;
   for(let iso='2026-07-01';iso<='2026-09-27';iso=addDays(iso,1)){
     const d=+iso.slice(8),w=dow(iso),wkend=w===0||w===5||w===6,rush=d>=25||d<=1;
-    if(d===25){add(iso,'NIP CR/SALARY/ACME LOGISTICS LTD',420000);add(iso,'ELECTRONIC MONEY TRANSFER LEVY',-50);}
-    if(d===26){add(iso,'NIP TRF TO MRS ADUNNI BELLO/RENT',-85000);add(iso,'NIP TRF CHARGE + VAT',-26.88);add(iso,'NIP TRF TO IFEOMA OKAFOR/MUM UPKEEP',-30000);add(iso,'NIP TRF CHARGE + VAT',-26.88);add(iso,'TARGET SAVINGS AUTOSAVE',-20000);}
-    if(d===27)add(iso,'WEB PURCHASE JUMIA NG',-R(10000,28000),true);
-    if(d===28&&iso<'2026-09-01'){add(iso,'POS PURCHASE THE PLACE LEKKI',-R(9000,16000),true);add(iso,'SMS ALERT CHARGES',-R(300,450));add(iso,'CARD MAINTENANCE FEE',-50);}
-    if(d===3)add(iso,'CASHLITE LOAN REPAYMENT',-25000);
-    if(d===5)add(iso,'NETFLIX.COM',-7000);
-    if(d===12)add(iso,'SPOTIFY',-1700);
-    if(d===20)add(iso,'SHOWMAX',-3500);
-    if(d===8)add(iso,'IKEDC PREPAID TOKEN',-R(15000,20000));
-    if(d===7)add(iso,'TRF TO GRACE CHAPEL/TITHE',-10000);
-    if(d===2||d===16)add(iso,'POS PURCHASE SHOPRITE LEKKI',-R(18000,32000));
-    if(d===6)add(iso,'ATM WDL LEKKI PHASE 1',-20000,true);
-    if(d===10){add(iso,'NIP TRF TO CHINEDU OKAFOR',-R(5000,15000),true);add(iso,'NIP TRF CHARGE + VAT',-10.75);}
-    if(d===4||d===14||d===24)add(iso,'MTN DATA BUNDLE',-R(3000,5000));
-    if(rnd()<0.12)add(iso,'AIRTIME PURCHASE MTN',-R(500,1000));
+    if(d===25){add(iso,p.emp,L(420000));add(iso,p.levy,-fe[0]);}
+    if(d===26){add(iso,p.rent,L(-85000));add(iso,p.tfee,-fe[1]);add(iso,p.fam,L(-30000));add(iso,p.tfee,-fe[1]);add(iso,p.save,L(-20000));}
+    if(d===27)add(iso,p.ecom,L(-R(10000,28000)),true);
+    if(d===28&&iso<'2026-09-01'){add(iso,p.out,L(-R(9000,16000)),true);const sm=R(300,450);add(iso,p.sms,p.cur==='NGN'?-sm:-fe[3]);add(iso,p.card,-fe[4]);}
+    if(d===3)add(iso,p.loan,L(-25000));
+    if(d===5)add(iso,p.subs[0],-p.sb[0]);
+    if(d===12)add(iso,p.subs[1],-p.sb[1]);
+    if(d===20)add(iso,p.subs[2],-p.sb[2]);
+    if(d===8)add(iso,p.bills,L(-R(15000,20000)));
+    if(d===7)add(iso,p.give,L(-10000));
+    if(d===2||d===16)add(iso,p.shop,L(-R(18000,32000)));
+    if(d===6)add(iso,p.atm,L(-20000),true);
+    if(d===10){add(iso,p.fam2,L(-R(5000,15000)),true);add(iso,p.tfee,-fe[2]);}
+    if(d===4||d===14||d===24)add(iso,p.data,L(-R(3000,5000)));
+    if(rnd()<0.12)add(iso,p.air,L(-R(500,1000)));
     const fp=(wkend?0.45:0.15)*(rush?1.9:1);
-    if(rnd()<fp)add(iso,['CHOWDECK ORDER','GLOVO NG','POS PURCHASE CHICKEN REPUBLIC'][Math.floor(rnd()*3)],-R(2500,7000),true);
-    if(!wkend&&rnd()<0.3)add(iso,rnd()<0.6?'BOLT RIDE':'UBER TRIP',-R(1800,6500),true);
-    if(rnd()<0.15)add(iso,'POS PURCHASE BUKKA HUT',-R(800,1900),true);
+    if(rnd()<fp)add(iso,p.deliv[Math.floor(rnd()*3)],L(-R(2500,7000)),true);
+    if(!wkend&&rnd()<0.3)add(iso,rnd()<0.6?p.ride[0]:p.ride[1],L(-R(1800,6500)),true);
+    if(rnd()<0.15)add(iso,p.eat,L(-R(800,1900)),true);
     const bp=(wkend?0.32:0.05)*(rush?1.7:1);
-    if(rnd()<bp)add(iso,'SPORTYBET WALLET FUNDING',-R(500,3000),true);
-    if(wkend&&rnd()<0.12){const v=R(2500,12000);add(iso,'SPORTYBET WITHDRAWAL',v);if(v>=10000)add(iso,'ELECTRONIC MONEY TRANSFER LEVY',-50);}
+    if(rnd()<bp)add(iso,p.bet,L(-R(500,3000)),true);
+    if(wkend&&rnd()<0.12){const v=L(R(2500,12000));add(iso,p.betw,v);if(Math.abs(v)>=10000*k)add(iso,p.levy,-fe[0]);}
   }
   return out;
 }
-let DEMO=null;
-const demoTxns=()=>DEMO||(DEMO=makeSample().map(t=>enrich(t,'demo')));
-const activeCur=()=>S.demo?'NGN':(CUR_MAP[S.cur]?S.cur:'NGN');
+let sampleIx=0, sampleAuto=true, sampleTick=null;
+const sp=()=>SAMPLES[sampleIx]||SAMPLES[0];
+let DEMO={};
+const demoTxns=()=>{const ix=sampleIx;if(DEMO[ix])return DEMO[ix];const p=SAMPLES[ix];const keep=CUR;setCur(p.cur);DEMO[ix]=makeSample(p).map(t=>enrich(t,'demo'));setCur(keep);return DEMO[ix];};
+const activeCur=()=>S.demo?sp().cur:(CUR_MAP[S.cur]?S.cur:'NGN');
 const getTxns=()=>{setCur(activeCur());return S.demo?demoTxns():S.txns.filter(t=>(t.cur||'NGN')===S.cur);};
+function sampleChips(){return `<div class="samples" role="group" aria-label="Sample statements from different countries"><div class="tiny">${sampleAuto?'Samples switch every few seconds so you can see each country. Tap one to stay on it.':'Tap another country to compare.'}</div><div class="row">${SAMPLES.map((p,i)=>`<button class="chip${i===sampleIx?' on':''}" data-act="set-sample" data-arg="${i}" aria-pressed="${i===sampleIx}">${esc(p.cur)} · ${esc(p.place)}</button>`).join('')}</div></div>`;}
+function setSample(i,manual){sampleIx=((i%SAMPLES.length)+SAMPLES.length)%SAMPLES.length;if(manual)sampleAuto=false;chat=[];dataVer++;render();}
+function startSampleTimer(){if(sampleTick)return;sampleTick=setInterval(()=>{if(!S.demo||!sampleAuto||tab!=='home'||document.visibilityState!=='visible')return;if((window.scrollY||0)>240||document.querySelector('#sheetRoot .sheet,#sheetRoot .celebrate'))return;if(document.activeElement&&/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName))return;setSample(sampleIx+1,false);},9000);}
 
 /* ================= statement parsing (runs on this device) ================= */
 const M4={juin:6,juil:7,janv:1,febr:2,sept:9,mars:3};
@@ -768,7 +799,7 @@ async function xlsxToRows(buf){
 
 /* ================= analysis ================= */
 let A_CACHE=null,A_KEY='';
-function getA(){const T=getTxns();const k=(S.demo?'d':'u')+T.length+':'+dataVer;if(k!==A_KEY){A_CACHE=T.length?analyze(T):null;A_KEY=k;}return A_CACHE;}
+function getA(){const T=getTxns();const k=(S.demo?'d'+sampleIx:'u')+T.length+':'+dataVer;if(k!==A_KEY){A_CACHE=T.length?analyze(T):null;A_KEY=k;}return A_CACHE;}
 function analyze(txns){
   const T=[...txns].sort((a,b)=>a.date<b.date?-1:a.date>b.date?1:0);
   const from=T[0].date,to=T[T.length-1].date,days=daysBetween(from,to)+1,months=Math.max(1,days/30.44);
@@ -999,7 +1030,7 @@ function statusHTML(){
 }
 function statementsPanel(){
   const A=getA();const T=getTxns();
-  const list=S.demo?`<div class="stmt"><div><div class="nm">Sample statement (Tolu, fictional)</div><div class="tiny">${A?`${fmtD(A.from)} – ${fmtDY(A.to)} · ${T.length} transactions`:''}</div></div><button class="btn q sm" data-act="clear-demo">Remove</button></div>`
+  const list=S.demo?`<div class="stmt"><div><div class="nm">Sample statement (${esc(sp().name)}, fictional)</div><div class="tiny">${A?`${fmtD(A.from)} – ${fmtDY(A.to)} · ${T.length} transactions`:''}</div></div><button class="btn q sm" data-act="clear-demo">Remove</button></div>`
     :S.statements.map(s=>`<div class="stmt"><div><div class="nm">${esc(s.name)}</div><div class="tiny">${s.from?fmtD(s.from)+' – '+fmtDY(s.to)+' · ':''}${s.count} transactions · ${esc(s.cur||'NGN')}</div>${s.kind==='manual'?'':`<label class="tiny">Currency <select aria-label="Currency of ${esc(s.name)}" data-change="stmt-cur" data-arg="${s.id}">${curOptions(s.cur||'NGN')}</select></label>`}</div><button class="btn q sm" data-act="rm-stmt" data-arg="${s.id}" aria-label="Remove ${esc(s.name)}">Remove</button></div>`).join('');
   const curs=[...new Set(S.txns.map(t=>t.cur||'NGN'))];
   const chips=!S.demo&&curs.length>1?`<div><h3 style="margin-bottom:4px">Show amounts in</h3><div class="row" role="group" aria-label="Currency to show">${curs.map(c=>`<button class="btn ${c===S.cur?'':'q'} sm" data-act="set-cur" data-arg="${c}" aria-pressed="${c===S.cur}">${c} ${curSym(c)}</button>`).join('')}</div><p class="tiny">Ledger never converts between currencies. Each currency is analysed on its own.</p></div>`:'';
@@ -1021,7 +1052,7 @@ function statementsPanel(){
 /* ---------- home ---------- */
 function viewHome(){
   const A=getA();let h=planBanner();
-  if(S.demo)h+=`<div class="banner"><p><b>You're looking at a sample.</b> Tolu is a fictional professional (shown in naira). Upload your own statement to see your real money story.</p><div class="row"><button class="btn sm" data-act="pick">${ic('upload')}Upload my statement</button></div></div>`;
+  if(S.demo)h+=`<div class="banner"><p><b>You're looking at a sample.</b> ${esc(sp().name)} is a fictional ${esc(sp().job)} in ${esc(sp().place)} (shown in ${esc(curName())}). Ledger reads statements from any bank in any of ${CURRENCIES.length} currencies. Upload your own to see your real money story.</p>${sampleChips()}<div class="row"><button class="btn sm" data-act="pick">${ic('upload')}Upload my statement</button></div></div>`;
   h+=checkinCard();
   if(!A)return h+emptyHero();
   h+=`<div id="story" class="stack">${storyHero(A)}${coachFeed(A)}<div class="grid2">${whereCard(A)}${cycleCard(A)}</div>${insightTiles(A)}<div class="grid2">${merchantsCard(A)}${trendCard(A)}</div></div>`;
@@ -1044,7 +1075,7 @@ function checkinCard(){
 function ringSVG(score){const r=52,c=2*Math.PI*r,col=score>=70?'var(--green)':score>=45?'var(--gold)':'var(--coral)';return`<svg viewBox="0 0 120 120" aria-hidden="true"><circle cx="60" cy="60" r="${r}" fill="none" stroke="var(--surface-2)" stroke-width="10"/><circle cx="60" cy="60" r="${r}" fill="none" stroke="${col}" stroke-width="10" stroke-linecap="round" stroke-dasharray="${c*score/100} ${c}"/></svg>`;}
 const GCOL={need:'var(--blue)',want:'var(--gold)',leak:'var(--coral)',other:'var(--ink-3)',save:'var(--green)'};
 function storyHero(A){
-  const who=S.demo?"Tolu's money story (sample)":'Your money story';
+  const who=S.demo?`${sp().name}'s money story (sample)`:'Your money story';
   const kept=Math.max(0,A.keptPer100),over=A.keptPer100<0;
   const segs=A.per100.map(p=>({...p,c:GCOL[p.k]})).concat(over?[]:[{k:'save',label:'Kept',v:kept,c:GCOL.save}]);
   const scale=Math.max(100,A.per100.reduce((s,p)=>s+p.v,0));
@@ -1059,7 +1090,7 @@ function storyHero(A){
      ${A.traits.length>1?`<div class="traits">${A.traits.slice(1,5).map(t=>`<span class="chip">${esc(ARCH[t.id].chip)}</span>`).join('')}</div>`:''}
     </div></div>
    <div class="stats3"><div class="stat"><b data-count="${Math.round(A.m.income)}" data-fmt="n">${money(A.m.income)}</b><span>in per month</span></div><div class="stat"><b data-count="${Math.round(A.m.spend)}" data-fmt="n">${money(A.m.spend)}</b><span>out per month</span></div><div class="stat"><b style="color:${A.keptRate<0?'var(--coral)':'var(--green)'}">${A.keptRate<0?'-':''}${pct(Math.abs(A.keptRate))}</b><span>${A.keptRate<0?'overspent':'kept'}</span></div></div>
-   <div class="per100"><h3>Of every ${curSym()}100 ${S.demo?'Tolu earns':'you earn'}</h3>
+   <div class="per100"><h3>Of every ${curSym()}100 ${S.demo?sp().name+' earns':'you earn'}</h3>
     <div class="split" role="img" aria-label="${segs.map(s=>`${s.label} ${curSym()}${Math.round(s.v)}`).join(', ')}">${segs.map(s=>`<i style="width:${s.v/scale*100}%;background:${s.c}"></i>`).join('')}</div>
     <div class="legend">${segs.map(s=>`<span><i style="background:${s.c}"></i>${s.label} <b class="num">${curSym()}${Math.round(s.v)}</b></span>`).join('')}${over?`<span style="color:var(--coral)"><b>${curSym()}${Math.round(-A.keptPer100)} more than earned</b></span>`:''}</div></div>
    ${quizGap?`<p class="gap">${esc(quizGap)}</p>`:''}
@@ -1171,7 +1202,7 @@ function viewCoach(){
   if(!S.consent.ai)return h+`<div class="notice stack" style="gap:10px"><b>Turn on the AI coach</b><p class="small">Your coach uses Claude, an AI model by Anthropic, to answer. When you ask a question, Ledger sends a short summary of your numbers${IN_VIEWER?'':' through Ledger\'s coach service'}: monthly totals, categories and patterns. It never sends your transactions, the file or the names of people you pay, and Ledger does not keep your questions. You can turn this off in Me.</p><div class="row"><button class="btn" data-act="ai-on">Turn on AI coach</button></div></div></section>`;
   if(sampleState==='none')h+='<p class="notice">The AI coach isn\'t available in this view. Your coach feed on Home still updates from your statement.</p>';
   else if(sampleState==='pending')h+='<p class="tiny">Connecting to your coach…</p>';
-  h+=`<div class="chat" id="chat" aria-live="polite">${chat.length?'':`<div class="msg a">Hi${S.demo?'':''}. I've looked at ${S.demo?"Tolu's sample statement":'your statement'}: ${money(A.m.income)} in and ${money(A.m.spend)} out a month. Ask me anything about it.</div>`}${chat.map(x=>`<div class="msg ${x.role==='user'?'u':'a'}${x.err?' err':''}">${esc(x.content)}</div>`).join('')}${chatBusy?`<div class="msg a" id="live">${liveText?esc(liveText):'Thinking…'}</div>`:''}</div>`;
+  h+=`<div class="chat" id="chat" aria-live="polite">${chat.length?'':`<div class="msg a">Hi${S.demo?'':''}. I've looked at ${S.demo?`${sp().name}'s sample statement`:'your statement'}: ${money(A.m.income)} in and ${money(A.m.spend)} out a month. Ask me anything about it.</div>`}${chat.map(x=>`<div class="msg ${x.role==='user'?'u':'a'}${x.err?' err':''}">${esc(x.content)}</div>`).join('')}${chatBusy?`<div class="msg a" id="live">${liveText?esc(liveText):'Thinking…'}</div>`:''}</div>`;
   if(!chat.length&&sampleState!=='none')h+=`<div class="suggest">${SUGGEST.map(s=>`<button data-act="ask" data-arg="${esc(s)}">${esc(s)}</button>`).join('')}</div>`;
   if(sampleState!=='none')h+=`<form class="composer" data-form="chat"><label class="sr" for="chatIn">Message your coach</label><textarea id="chatIn" data-input="chat" placeholder="Ask about your money…" rows="1">${esc(chatDraft)}</textarea>${chatBusy?'<button class="btn q" type="button" data-act="stop">Stop</button>':'<button class="btn" type="submit">Send</button>'}</form>`;
   return h+'</section>';
@@ -1182,7 +1213,7 @@ function coachContext(A){
   const m=A.m,u=Math.max(1,CUR==='NGN'?100:niceRound(100/(SCALE_NGN[CUR]||1))),r=v=>Math.round(v/u)*u;
   return[
     `All amounts are in ${curName()} (${CUR}, symbol ${curSym()}).`,
-    `Data source: ${S.demo?'a SAMPLE statement for a fictional person named Tolu (make clear this is sample data if relevant)':"the user's own uploaded bank statement"}, ${fmtDY(A.from)} to ${fmtDY(A.to)}.`,
+    `Data source: ${S.demo?('a SAMPLE statement for a fictional person named '+sp().name+' in '+sp().place+' (make clear this is sample data if relevant)'):"the user's own uploaded bank statement"}, ${fmtDY(A.from)} to ${fmtDY(A.to)}.`,
     `Monthly income ${curSym()}${r(m.income)}; monthly spending (net) ${curSym()}${r(m.spend)}; kept ${curSym()}${r(m.kept)} (${pct(A.keptRate)}).`,
     `Of every ${curSym()}100 earned: ${A.per100.map(p=>`${p.label} ${curSym()}${Math.round(p.v)}`).join(', ')}, kept ${curSym()}${Math.round(A.keptPer100)}.`,
     `Top categories per month: ${A.cats.slice(0,9).map(c=>`${c.cat} ${curSym()}${r(c.m)}`).join('; ')}.`,
@@ -1470,6 +1501,7 @@ const ACT={
   'paste-go':()=>{const run=()=>{if(!pasteDraft.trim()){setU({error:'Paste some statement rows first.'});return;}finishIngest(textToRows(pasteDraft),'text','Pasted text');};gateUpload(()=>{if(!S.consent.read)openConsent(run);else run();});},
   manual:()=>{if(!S.consent.read)openConsent(openManual);else openManual();},
   'pw-cancel':()=>{pendingFile=null;setU({});},
+  'set-sample':(a)=>setSample(+a,true),
   'clear-demo':()=>{S.demo=false;save();dataVer++;render();},
   'load-demo':()=>{if(S.txns.length){toast('Your own data is loaded. Remove it first to view the sample.');return;}S.demo=true;revealNext=true;save();dataVer++;render();},
   'rm-stmt':id=>{S.txns=S.txns.filter(t=>t.src!==id);S.statements=S.statements.filter(s=>s.id!==id);if(S.txns.length&&!S.txns.some(t=>(t.cur||'NGN')===S.cur))S.cur=S.txns[0].cur||'NGN';toast('Statement removed from this device');U={};onDataChanged();},
@@ -1554,6 +1586,8 @@ mq.addEventListener('change',()=>render());
 /* ================= boot ================= */
 expireChallenges();
 if(!S.demo&&!S.txns.length&&S.statements.length){S.statements=[];}
+{const c=localeCurrency();const i=SAMPLES.findIndex(x=>x.cur===c);if(i>=0)sampleIx=i;}
+startSampleTimer();
 render();
 if(IN_VIEWER){(async()=>{try{sampleFn=await window.claude.use('sample');}catch(e){sampleFn=null;}sampleState=sampleFn?'ready':'none';if(tab==='coach')render();})();}
 else{

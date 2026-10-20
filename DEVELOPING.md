@@ -73,6 +73,11 @@ Open a new chat and attach this folder, or give it the GitHub repo `InveztorJON/
 - 5 Oct 2026: Ledger Plus. 5 free uploads, ₦1,500/month by bank transfer, proof-of-payment upload, admin verification with AI receipt check, one-month periods, renew/cancel reminder 3 days before the end, restore on another phone. Privacy and terms updated.
 - 29 Sep 2026: first public deploy. Coach switched to Netlify AI Gateway. Legal pages carry the Jonspire Limited CAC details and jonspirelimited@gmail.com.
 
+## 20 Oct — Featured samples for 10 currencies
+- `SAMPLES` in site/app.js: fictional people in NGN, USD, GBP, EUR, ZAR, KES, GHS, EGP, INR, BRL (local merchants, rails, fees). Amounts are generated in naira-sized units then scaled by each sample's `k` (never an FX conversion).
+- The sample opens on the visitor's locale currency (else Tolu), rotates every 9 s on Home (paused when scrolled, a sheet is open or a field is focused), and tapping a chip picks one and stops rotation.
+- `tests/samples_test.py <url>` (47 checks). sw.js VERSION is `ledger-plus-9`.
+
 ## 19 Oct — Ledger v2
 - **Card payments auto-activate**: `netlify/functions/whop.mjs` (`/api/whop`) verifies Whop's Standard Webhooks signature, matches the payer by email, activates/extends Ledger Plus and sends the approval email. Setup (owner): in Whop dashboard create a webhook to `https://jonspire-ledger.netlify.app/api/whop` for `payment.succeeded`, then set `WHOP_WEBHOOK_SECRET` (the `ws_...` value) in Netlify env vars and redeploy. Until set the endpoint returns 503 and receipt upload + admin approval remains the fallback. Tests: `node tests/test_whop.mjs`.
 - **Statement accuracy**: multi-language months/headers, locale-aware decimals and date order, card-statement polarity, OFX/QFX/QIF/MT940/CAMT.053 (tests `global_test.py`, `global2_test.py`).
