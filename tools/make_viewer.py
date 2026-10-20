@@ -13,5 +13,8 @@ out = re.sub(r'<style>.*?</style>', lambda m: '<style>\n' + css.strip() + '\n</s
 start, end = out.index('</style>') + len('</style>'), out.index('<script>')
 out = out[:start] + '\n' + body + '\n' + out[end:]
 out = re.sub(r'<script>.*?</script>', lambda m: '<script>\n' + js.strip() + '\n</script>', out, count=1, flags=re.S)
+import base64
+logo='data:image/png;base64,'+base64.b64encode((root/'site'/'icons'/'logo.png').read_bytes()).decode()
+out=out.replace('__LOGO_DATA__',logo)
 ref.write_text(out, encoding='utf8')
 print('wrote', ref, len(out), 'bytes')

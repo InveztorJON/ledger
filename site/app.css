@@ -57,6 +57,9 @@ a{color:var(--green);text-underline-offset:2px}
 
 .topbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
 .brand{display:flex;align-items:center;gap:10px}
+.brand-logo{height:31px;width:auto;display:block}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .brand-logo{background:#fff;padding:5px 10px;border-radius:10px;height:41px}}
+:root[data-theme="dark"] .brand-logo{background:#fff;padding:5px 10px;border-radius:10px;height:41px}
 .brand b{font-family:var(--f-display);font-size:1.5rem;font-weight:800;letter-spacing:-.03em}
 .mark{width:32px;height:32px;border-radius:10px;background:var(--green);color:var(--green-ink);display:grid;place-items:center;font-family:var(--f-display);font-weight:800;font-size:1.05rem}
 .pills{display:flex;gap:8px;align-items:center;flex-wrap:wrap}

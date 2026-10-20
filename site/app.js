@@ -964,6 +964,7 @@ const mq=matchMedia('(min-width: 980px)');const isWide=()=>mq.matches;
 function countUps(root){if(reduceMotion())return;root.querySelectorAll('[data-count]').forEach(el=>{const to=+el.dataset.count,fmt=el.dataset.fmt;const t0=performance.now();const f=v=>fmt==='n'?money(v):Math.round(v);(function s(t){const k=Math.min(1,(t-t0)/900),e=1-Math.pow(1-k,3);el.textContent=f(to*e);if(k<1)requestAnimationFrame(s);})(t0);});}
 
 /* ================= render ================= */
+const LOGO_SRC=IN_VIEWER?'__LOGO_DATA__':'icons/logo.png';
 const LANGS=[['en','English'],['fr','Français'],['es','Español'],['pt','Português'],['sw','Kiswahili']];
 const I18N={fr:{'Home':'Accueil','Statements':'Relevés','Grow':'Progresser','Coach':'Coach','Me':'Moi','Before Ledger reads your statement':'Avant que Ledger lise votre relevé','Agree and continue':'Accepter et continuer','Download my data':'Télécharger mes données','Delete everything':'Tout supprimer','Language':'Langue','Close':'Fermer','Download as spreadsheet (CSV)':'Télécharger en tableur (CSV)'},
 es:{'Home':'Inicio','Statements':'Extractos','Grow':'Crecer','Coach':'Coach','Me':'Yo','Before Ledger reads your statement':'Antes de que Ledger lea tu extracto','Agree and continue':'Aceptar y continuar','Download my data':'Descargar mis datos','Delete everything':'Borrar todo','Language':'Idioma','Close':'Cerrar','Download as spreadsheet (CSV)':'Descargar como hoja de cálculo (CSV)'},
@@ -975,7 +976,7 @@ function render(){
   setCur(activeCur());
   if(isWide()&&tab==='statements')tab='home';
   const lv=levelOf(S.xp),st=streak();
-  $('#topbar').innerHTML=`<div class="brand"><span class="mark" aria-hidden="true">L</span><b>Ledger</b></div>
+  $('#topbar').innerHTML=`<div class="brand"><img class="brand-logo" src="${LOGO_SRC}" alt="Ledger" width="108" height="31"></div>
    <div class="pills"><button class="pill streak" data-act="tab" data-arg="me" aria-label="${st} day streak">${ic('flame')}<span class="num">${st}</span><span class="lbl">day streak</span></button>
    <button class="pill" data-act="tab" data-arg="me" aria-label="Level ${lv.n}, ${S.xp} XP">${ic('star')}<span>Lv ${lv.n}</span><span class="lbl num">· ${S.xp} XP</span></button>
    ${installEvt?`<button class="pill" data-act="install" aria-label="Install Ledger on this device">${ic('upload')}<span>Install app</span></button>`:''}
