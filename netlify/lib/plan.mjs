@@ -2,8 +2,8 @@
 // Keep PLAN in sync with window.LEDGER_PLAN at the top of site/app.js (tests/test_subs.mjs checks this).
 
 export const PLAN = {
-  freeUploads: 2,
-  priceNaira: 6000,
+  trialDays: 7,
+  priceNaira: 9000,
   monthlyUploads: 20,   // statement uploads allowed in each paid month
   warnAt: 0.8,          // warn (and ask renew or cancel) when this share is used
   bank: 'UBA',

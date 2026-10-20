@@ -1,14 +1,33 @@
 /* ===== Ledger settings: edit before launch ===== */
 window.LEDGER_CONTACT_EMAIL = 'jonspirelimited@gmail.com';   // shown in the app for questions and feedback
 // Ledger Plus: free trial and subscription. Keep in sync with netlify/lib/plan.mjs (tests check this).
-window.LEDGER_PLAN = {freeUploads: 2, priceNaira: 6000, monthlyUploads: 20, warnAt: 0.8, bank: 'UBA', accountName: 'JONSPIRE LIMITED', accountNumber: '1029821937', remindDays: 3, appUrl: 'https://jonspire-ledger.netlify.app'};
+window.LEDGER_PLAN = {trialDays: 7, priceNaira: 9000, monthlyUploads: 20, warnAt: 0.8, bank: 'UBA', accountName: 'JONSPIRE LIMITED', accountNumber: '1029821937', remindDays: 3, appUrl: 'https://jonspire-ledger.netlify.app'};
 /* ================================================= */
 'use strict';
 /* ================= utilities ================= */
 const $=(s,r=document)=>r.querySelector(s);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const naira=n=>(n<0?'-':'')+'₦'+Math.round(Math.abs(n)).toLocaleString('en-NG');
-const nairaK=n=>{const a=Math.abs(n);const s=a>=1e6?(a/1e6).toFixed(a>=1e7?0:1).replace(/\.0$/,'')+'m':a>=1e4?Math.round(a/1e3)+'k':Math.round(a).toLocaleString('en-NG');return (n<0?'-':'')+'₦'+s;};
+/* ---- currency core: one active currency at a time, no conversion ---- */
+const CURRENCIES=[['NGN','Nigerian naira','₦'],['USD','US dollar','$'],['EUR','Euro','€'],['GBP','British pound','£'],['ZAR','South African rand','R'],['KES','Kenyan shilling','KSh'],['GHS','Ghanaian cedi','GH₵'],['EGP','Egyptian pound','E£'],['MAD','Moroccan dirham','MAD'],['TZS','Tanzanian shilling','TSh'],['UGX','Ugandan shilling','USh'],['RWF','Rwandan franc','RF'],['XOF','West African CFA franc','CFA'],['XAF','Central African CFA franc','FCFA'],['ETB','Ethiopian birr','Br'],['DZD','Algerian dinar','DA'],['TND','Tunisian dinar','DT'],['ZMW','Zambian kwacha','ZK'],['BWP','Botswana pula','P'],['NAD','Namibian dollar','N$'],['MUR','Mauritian rupee','Rs'],['MZN','Mozambican metical','MT'],['AOA','Angolan kwanza','Kz'],['CAD','Canadian dollar','CA$'],['AUD','Australian dollar','A$'],['CHF','Swiss franc','CHF'],['SEK','Swedish krona','kr'],['NOK','Norwegian krone','kr'],['DKK','Danish krone','kr'],['PLN','Polish zloty','zł'],['CZK','Czech koruna','Kč'],['HUF','Hungarian forint','Ft'],['RON','Romanian leu','lei'],['INR','Indian rupee','₹'],['AED','UAE dirham','AED'],['BRL','Brazilian real','R$'],['MXN','Mexican peso','MX$']];
+const CUR_MAP=Object.fromEntries(CURRENCIES.map(c=>[c[0],c]));
+const ZERO_DEC=new Set(['UGX','RWF','XOF','XAF','TZS','HUF']);
+const minorOf=c=>ZERO_DEC.has(c)?0:(c==='TND'?3:2);
+let CUR='NGN';
+const setCur=c=>{CUR=CUR_MAP[c]?c:'NGN';};
+const curSym=(c=CUR)=>(CUR_MAP[c]||[c,c,c])[2];
+const curName=(c=CUR)=>(CUR_MAP[c]||[c,c])[1];
+const _num=(n,d)=>Math.abs(n).toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d});
+function moneyIn(c,n,d){const sym=curSym(c);const sp=/^[A-Za-z]{2,}/.test(sym)?' ':'';return (n<0?'-':'')+sym+sp+_num(n,d);}
+const money=(n,c=CUR)=>moneyIn(c,n,0);
+const moneyD=(n,c=CUR)=>moneyIn(c,n,minorOf(c));
+const moneyK=(n,c=CUR)=>{const a=Math.abs(n);const s=a>=1e6?(a/1e6).toFixed(a>=1e7?0:1).replace(/\.0$/,'')+'m':a>=1e4?Math.round(a/1e3)+'k':_num(a,0);const sym=curSym(c);return (n<0?'-':'')+sym+(/^[A-Za-z]{2,}/.test(sym)?' ':'')+s;};
+const NAIRA_FIXED=n=>(n<0?'-':'')+'₦'+Math.round(Math.abs(n)).toLocaleString('en-NG');
+// Rough size of 1 unit against the naira, used ONLY to scale thresholds (never shown, never used to convert amounts).
+const SCALE_NGN={NGN:1,USD:1500,EUR:1650,GBP:1950,ZAR:85,KES:11.5,GHS:100,EGP:30,MAD:150,TZS:0.6,UGX:0.4,RWF:1.1,XOF:2.5,XAF:2.5,ETB:12,DZD:11,TND:480,ZMW:60,BWP:110,NAD:85,MUR:33,MZN:23,AOA:1.7,CAD:1100,AUD:1000,CHF:1750,SEK:145,NOK:140,DKK:220,PLN:380,CZK:65,HUF:4,RON:330,INR:18,AED:410,BRL:270,MXN:80};
+const niceRound=x=>{if(x<=0)return 0;const p=Math.pow(10,Math.floor(Math.log10(x)));const r=x/p;return (r<1.5?1:r<3.5?2:r<7.5?5:10)*p;};
+const localScale=n=>niceRound(n/(SCALE_NGN[CUR]||1));
+// Rewrites naira example amounts in lesson text into a similar-sized amount in the active currency.
+const lz=t=>String(t).replace(/₦([\d,]+)/g,(a,d)=>{const n=+d.replace(/,/g,'');const v=n/(SCALE_NGN[CUR]||1);const p=Math.pow(10,Math.max(0,Math.floor(Math.log10(Math.max(v,1)))-1));return money(Math.max(1,Math.round(v/p)*p));});
 const pct=x=>Math.round(x*100)+'%';
 const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
 const MON_SHORT=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -49,8 +68,8 @@ const ic=(n,cls='')=>`<svg class="${cls}" viewBox="0 0 24 24" fill="none" stroke
 
 /* ================= state & storage ================= */
 const KEY='ledger_v3';
-function freshState(){return{v:3,demo:true,consent:{read:false,store:false,ai:false,at:null},statements:[],txns:[],quiz:null,xp:0,badges:[],checkins:{},challenges:{active:[],done:[],ended:[]},lessons:{},tags:0,tagXP:{d:'',n:0},scoreHist:{},coachDays:{},tab:'home'};}
-function load(){try{const s=JSON.parse(localStorage.getItem(KEY)||'null');if(s&&s.v===3)return Object.assign(freshState(),s);}catch(e){}return freshState();}
+function freshState(){return{v:3,cur:'NGN',demo:true,consent:{read:false,store:false,ai:false,at:null},statements:[],txns:[],quiz:null,xp:0,badges:[],checkins:{},challenges:{active:[],done:[],ended:[]},lessons:{},tags:0,tagXP:{d:'',n:0},scoreHist:{},coachDays:{},tab:'home'};}
+function load(){try{const s=JSON.parse(localStorage.getItem(KEY)||'null');if(s&&s.v===3){const o=Object.assign(freshState(),s);o.txns.forEach(t=>{if(!t.cur)t.cur='NGN';});o.statements.forEach(t=>{if(!t.cur)t.cur='NGN';});if(!CUR_MAP[o.cur])o.cur='NGN';return o;}}catch(e){}return freshState();}
 let S=load();
 try{localStorage.removeItem('ledger_state');}catch(e){}
 function save(){try{const c=JSON.parse(JSON.stringify(S));if(!S.consent.store){c.txns=[];c.statements=[];}localStorage.setItem(KEY,JSON.stringify(c));}catch(e){}}
@@ -64,18 +83,19 @@ let chat=[], chatBusy=false, liveText='', chatCtl=null, chatDraft='', sampleFn=n
 let ciDraft={};
 
 /* ================= Ledger Plus: free trial and subscription ================= */
-const PLAN=Object.assign({freeUploads:2,priceNaira:6000,monthlyUploads:20,warnAt:0.8,bank:'UBA',accountName:'JONSPIRE LIMITED',accountNumber:'1029821937',remindDays:3,appUrl:''},window.LEDGER_PLAN||{});
+const PLAN=Object.assign({trialDays:7,priceNaira:9000,monthlyUploads:20,warnAt:0.8,bank:'UBA',accountName:'JONSPIRE LIMITED',accountNumber:'1029821937',remindDays:3,appUrl:'',cardUrl:'https://whop.com/checkout/plan_K5cA8QWGAioHD/',cardPriceUsd:9},window.LEDGER_PLAN||{});
 const PKEY='ledger_plan';
 function loadPlan(){try{const p=JSON.parse(localStorage.getItem(PKEY)||'null');if(p&&typeof p==='object')return p;}catch(e){}return{};}
 let P=loadPlan();
 function savePlan(){try{localStorage.setItem(PKEY,JSON.stringify(P));}catch(e){}}
-// The free-trial count is also kept in a small cookie, so clearing only part of the browser data doesn't hand out a fresh trial.
+// The free trial lasts PLAN.trialDays from the first statement upload. Its start time is also kept in a small cookie,
+// so clearing only part of the browser data doesn't hand out a fresh trial.
 const TRIAL_COOKIE='ledger_trial';
-function readTrialCookie(){try{const m=document.cookie.match(/(?:^|; )ledger_trial=(\d{1,3})/);return m?+m[1]:0;}catch(e){return 0;}}
+function readTrialCookie(){try{const m=document.cookie.match(/(?:^|; )ledger_trial=(\d{10,14})/);return m?+m[1]:0;}catch(e){return 0;}}
 function writeTrialCookie(n){try{document.cookie=`${TRIAL_COOKIE}=${n}; max-age=63072000; path=/; SameSite=Strict${location.protocol==='https:'?'; Secure':''}`;}catch(e){}}
-if(typeof P.used!=='number'){P.used=S.demo?0:Math.min(S.statements.length,PLAN.freeUploads);}
-if(!IN_VIEWER&&readTrialCookie()>P.used)P.used=Math.min(readTrialCookie(),PLAN.freeUploads);
-if(!IN_VIEWER)writeTrialCookie(P.used);
+if(typeof P.used!=='number')P.used=S.demo?0:S.statements.length;
+if(!P.trialStart&&P.used>0)P.trialStart=Date.now();   // people who already uploaded before the 7-day trial existed get a fresh 7 days
+if(!IN_VIEWER){const c=readTrialCookie();if(c&&(!P.trialStart||c<P.trialStart))P.trialStart=c;if(P.trialStart)writeTrialCookie(P.trialStart);}
 savePlan();
 const planActive=()=>!!(P.sub&&P.sub.end&&Date.parse(P.sub.end)>Date.now());
 const monthLimit=()=>PLAN.monthlyUploads;
@@ -84,13 +104,17 @@ const monthLeft=()=>monthLimit()-monthUsed();
 const monthFull=()=>planActive()&&monthUsed()>=monthLimit();
 const warnAtCount=()=>Math.ceil(monthLimit()*PLAN.warnAt);
 const monthWarn=()=>planActive()&&monthUsed()>=warnAtCount()&&!monthFull();
-const freeLeft=()=>Math.max(0,PLAN.freeUploads-(P.used||0));
-const canUpload=()=>planActive()?!monthFull():freeLeft()>0;
+const trialEnd=()=>P.trialStart?P.trialStart+PLAN.trialDays*864e5:0;
+const trialStarted=()=>!!P.trialStart;
+const trialOver=()=>trialStarted()&&(Date.now()>=trialEnd()||(P.used||0)>=PLAN.monthlyUploads);
+const trialDaysLeft=()=>trialStarted()?Math.max(0,Math.ceil((trialEnd()-Date.now())/864e5)):PLAN.trialDays;
+const freeLeft=()=>trialOver()?0:Math.max(1,trialDaysLeft());   // days of free trial left (7 before the first upload)
+const canUpload=()=>planActive()?!monthFull():!trialOver();
 const planDaysLeft=()=>P.sub&&P.sub.end?Math.max(0,Math.ceil((Date.parse(P.sub.end)-Date.now())/864e5)):0;
 const planExpired=()=>!!(P.sub&&P.sub.end&&!planActive());
 const renewDue=()=>planActive()&&planDaysLeft()<=PLAN.remindDays&&!P.sub.cancelAtEnd&&!P.sub.pending;
 const fmtLong=iso=>{try{return new Date(iso).toLocaleDateString('en-NG',{day:'numeric',month:'long',year:'numeric',timeZone:'Africa/Lagos'});}catch(e){return String(iso).slice(0,10);}};
-const priceTxt=()=>naira(PLAN.priceNaira);
+const priceTxt=()=>NAIRA_FIXED(PLAN.priceNaira);
 let planView=null, planBusy=false, planErr='', planDraft={name:'',phone:'',email:''}, cancelAsk=false;
 
 async function subApi(action,body){
@@ -127,10 +151,11 @@ function countUpload(){
     else usageNudge();
     return;
   }
-  P.used=(P.used||0)+1;savePlan();if(!IN_VIEWER)writeTrialCookie(P.used);
-  const left=freeLeft();
-  if(left>0)toast(`${left} free statement upload${left===1?'':'s'} left`);
-  else setTimeout(()=>openPlan('limit'),900);
+  const firstUse=!P.trialStart;
+  if(firstUse){P.trialStart=Date.now();if(!IN_VIEWER)writeTrialCookie(P.trialStart);}
+  P.used=(P.used||0)+1;savePlan();
+  if(trialOver())setTimeout(()=>openPlan('limit'),900);
+  else toast(firstUse?`Your ${PLAN.trialDays}-day free trial has started`:`Free trial: ${trialDaysLeft()} day${trialDaysLeft()===1?'':'s'} left`);
 }
 // Reports uploads to the server one at a time. Uploads made offline wait here and are sent as soon as the phone is online again.
 let flushing=null;
@@ -182,10 +207,10 @@ function planHTML(reason){
   const head=`<button class="btn q sm x" data-act="close" aria-label="Close">${ic('x')}</button>`;
   const err=planErr?`<div class="status err" role="alert">${esc(planErr)}</div>`:'';
   const busy=planBusy?`<div class="status busy" role="status"><span class="spin" aria-hidden="true"></span>${esc(planBusy)}</div>`:'';
-  const intro=reason==='limit'&&!planActive()?`<div class="status ok"><b>You've used your ${PLAN.freeUploads} free statement uploads.</b> Everything you've uploaded stays here. To keep going, subscribe to Ledger Plus.</div>`
+  const intro=reason==='limit'&&!planActive()?`<div class="status ok"><b>Your ${PLAN.trialDays}-day free trial has ended.</b> Everything you've uploaded stays here. To keep going, subscribe to Ledger Plus.</div>`
    :reason==='full'&&planActive()?`<div class="status err" role="alert"><b>You've used all ${monthLimit()} uploads for this month.</b> Renew for ${priceTxt()} to start a new month of ${monthLimit()} uploads right away, or cancel. Your data stays here either way.</div>`
    :reason==='warn'&&planActive()?`<div class="status busy" role="status"><b>${monthUsed()} of ${monthLimit()} uploads used.</b> ${monthLeft()} left this month. Renew now to keep uploading without a break, or cancel if you're done.</div>`:'';
-  const what=`<ul class="evidence"><li>Up to ${PLAN.monthlyUploads} statement uploads each month</li><li>${priceTxt()} a month by bank transfer. No card needed, no automatic charges</li><li>We remind you ${PLAN.remindDays} days before your month ends, so you can renew or cancel</li></ul>`;
+  const what=`<ul class="evidence"><li>Up to ${PLAN.monthlyUploads} statement uploads each month</li><li>${PLAN.trialDays}-day free trial first. It starts with your first statement</li><li>${priceTxt()} a month by bank transfer in Nigeria, with no automatic charges</li><li>Outside Nigeria? Pay about US$${PLAN.cardPriceUsd} a month by card, bank debit or local method <a href="${esc(PLAN.cardUrl)}" target="_blank" rel="noopener noreferrer">on our secure Whop checkout</a>. Use the same email at checkout as the one you give below. Ledger Plus then switches on by itself within a few minutes of your payment. If it hasn't after 10 minutes, upload your Whop receipt as proof and we'll switch you on</li><li>We remind you ${PLAN.remindDays} days before your month ends, so you can renew or cancel</li></ul>`;
   if(IN_VIEWER)return`<div id="planSheet" class="stack">${head}<h2>Ledger Plus · ${priceTxt()} a month</h2>${intro}${what}${payBox()}<p class="small">To subscribe and upload your proof of payment, open the Ledger app${PLAN.appUrl?`: <a href="${esc(PLAN.appUrl)}" target="_blank" rel="noopener">${esc(PLAN.appUrl.replace(/^https?:\/\//,''))}</a>`:''}.</p></div>`;
   const s=P.sub||{};
   let v=planView;
@@ -281,8 +306,8 @@ function planLine(){
   if(planActive())return`<div class="planline good">${ic('check')}<span><b>Ledger Plus</b> · ${monthUsed()} of ${monthLimit()} uploads used · until ${fmtLong(P.sub.end)}</span></div>`;
   if(P.sub&&P.sub.pending)return`<div class="planline">${ic('check')}<span>Payment received, being verified. <button class="btn link" data-act="plan">Details</button></span></div>`;
   const left=freeLeft();
-  if(left>0)return`<div class="planline">${ic('star')}<span>Free trial: <b>${left} of ${PLAN.freeUploads}</b> statement upload${left===1?'':'s'} left</span></div>`;
-  return`<div class="planline warn">${ic('lock')}<span>Free uploads used. <button class="btn link" data-act="plan">Get Ledger Plus · ${priceTxt()}/month</button></span></div>`;
+  if(left>0)return`<div class="planline">${ic('star')}<span>${trialStarted()?`Free trial: <b>${left} of ${PLAN.trialDays} days</b> left`:`<b>${PLAN.trialDays}-day free trial</b> starts with your first statement`}</span></div>`;
+  return`<div class="planline warn">${ic('lock')}<span>Free trial ended. <button class="btn link" data-act="plan">Get Ledger Plus · ${priceTxt()}/month</button></span></div>`;
 }
 function planBanner(){
   if(IN_VIEWER||!P.sub)return'';
@@ -299,9 +324,9 @@ function planCard(){
   let body;
   if(planActive())body=`<div class="head"><div><h2>Ledger Plus</h2><p class="muted small">Active until ${fmtLong(s.end)} · ${planDaysLeft()} days left${s.cancelAtEnd?' · won\'t renew':''}</p></div><span class="chip good">${ic('check')}Active</span></div>${usageMeter()}`;
   else if(s.pending)body=`<div class="head"><div><h2>Ledger Plus</h2><p class="muted small">Payment received, being verified (usually within 24 hours)</p></div><span class="chip warn">Verifying</span></div>`;
-  else{const used=Math.min(P.used||0,PLAN.freeUploads);body=`<div class="head"><div><h2>${planExpired()?'Ledger Plus ended':'Free trial'}</h2><p class="muted small">${planExpired()?`Ended ${fmtLong(s.end)}. `:''}${used} of ${PLAN.freeUploads} free statement uploads used</p></div><span class="chip ${freeLeft()?'info':'bad'}">${freeLeft()} left</span></div><div class="xp" role="progressbar" aria-label="Free uploads used" aria-valuemin="0" aria-valuemax="${PLAN.freeUploads}" aria-valuenow="${used}"><i style="width:${used/PLAN.freeUploads*100}%"></i></div>`;}
+  else{const dl=trialDaysLeft(),over=trialOver();body=`<div class="head"><div><h2>${planExpired()?'Ledger Plus ended':'Free trial'}</h2><p class="muted small">${planExpired()?`Ended ${fmtLong(s.end)}. `:''}${trialStarted()?(over?`Your ${PLAN.trialDays}-day free trial has ended`:`${dl} of ${PLAN.trialDays} free days left`):`${PLAN.trialDays} free days start with your first statement`}</p></div><span class="chip ${over?'bad':'info'}">${over?'Ended':dl+' day'+(dl===1?'':'s')}</span></div><div class="xp" role="progressbar" aria-label="Free trial days used" aria-valuemin="0" aria-valuemax="${PLAN.trialDays}" aria-valuenow="${PLAN.trialDays-(over?0:dl)}"><i style="width:${over?100:(PLAN.trialDays-dl)/PLAN.trialDays*100}%"></i></div>`;}
   return`<section class="card" id="plan">${body}
-   <p class="small muted" style="margin-top:10px">Ledger Plus: up to ${PLAN.monthlyUploads} statement uploads a month for ${priceTxt()}, paid by bank transfer to ${esc(PLAN.accountName)} (${esc(PLAN.bank)}).</p>
+   <p class="small muted" style="margin-top:10px">Ledger Plus: up to ${PLAN.monthlyUploads} statement uploads a month for ${priceTxt()} (about US$${PLAN.cardPriceUsd} by card). Pay by bank transfer to ${esc(PLAN.accountName)} (${esc(PLAN.bank)}), or by card from anywhere.</p>
    <div class="row" style="margin-top:12px"><button class="btn sm" data-act="plan">${planActive()?'Manage':s.pending?'See status':planExpired()?'Renew':'Get Ledger Plus'}</button>${!IN_VIEWER&&!P.id?'<button class="btn q sm" data-act="plan-restore-open">Restore on this phone</button>':''}</div>
    ${P.id?`<p class="tiny" style="margin-top:10px">Your code: <b class="num">${esc(P.id)}</b></p>`:''}</section>`;
 }
@@ -319,30 +344,30 @@ const typeOf=(cat,credit)=>((credit?CREDIT_CATS:CATS).find(x=>x.c===cat)||{t:cre
 const BETS='bet9ja|sportybet|betking|nairabet|1xbet|merrybet|msport|bangbet|betway|parimatch|betano|\\bbet\\b|betting|lotto|lottery|baba ijebu';
 const DR=[
  ['Bills & power',/service charge|estate due/],
- ['Bank fees & levies',/sms ?alert|sms charge|sms notif|alert charge|stamp duty|\bemtl\b|money transfer levy|maint(enance)? fee|card maint|\bcot\b|commission on turnover|\bvat\b|nip charge|trf charge|transfer charge|transfer fee|charge ?\+ ?vat|bank charge|\bcharges?\b|\bfee\b|\blevy\b/],
- ['Savings & investing',/saving|autosave|target sav|fixed deposit|piggyvest|cowrywise|risevest|bamboo|trove|chaka|\binvest|safelock|\bvault\b|\bsave\b/],
+ ['Bank fees & levies',/overdraft|monthly (account )?fee|account fee|service fee|interest charge|atm fee|foreign (transaction|exchange)|currency conversion|wire fee|frais|geb[uü]hr|comisi[oó]n|sms ?alert|sms charge|sms notif|alert charge|stamp duty|\bemtl\b|money transfer levy|maint(enance)? fee|card maint|\bcot\b|commission on turnover|\bvat\b|nip charge|trf charge|transfer charge|transfer fee|charge ?\+ ?vat|bank charge|\bcharges?\b|\bfee\b|\blevy\b/],
+ ['Savings & investing',/saving|autosave|target sav|fixed deposit|piggyvest|cowrywise|risevest|bamboo|trove|chaka|\binvest|safelock|\bvault\b|\bsave\b|vanguard|fidelity|schwab|robinhood|\betf\b|\bisa\b|401k|\bira\b|trading ?212|coinbase|binance|pension|sparplan/],
  ['Betting',new RegExp(BETS)],
- ['Subscriptions',/netflix|spotify|showmax|apple\.com|itunes|icloud|youtube|google ?\*|google play|prime video|amazon prime|audiomack|boomplay|canva|chatgpt|openai|subscription|\bdstv\b|\bgotv\b|startimes/],
- ['Loan repayments',/\bloan|repayment|\brepay\b|fairmoney|palmcredit|\bcarbon\b|okash|renmoney|quickcheck|aella|easemoni|credit card/],
- ['Bills & power',/ikedc|ekedc|aedc|phed|kedco|eedc|ibedc|\bbedc|\bjed\b|electricity|\belectric\b|prepaid|\btoken\b|\bnepa\b|water bill|lawma|waste|spectranet|\bsmile\b|ipnx|fib(re|er)|starlink|internet|broadband/],
- ['Airtime & data',/airtime|data bundle|\bdata\b|recharge|\bvtu\b|\bmtn\b|\bglo\b|airtel|9mobile|etisalat/],
- ['Transport',/\buber\b|\bbolt\b|taxify|indrive|\brida\b|gokada|lagride|\bbrt\b|cowry|\bfuel\b|petrol|filling station|total ?energies|\bmobil\b|conoil|oando|\bnnpc\b|ardova|\bfare\b|transport|parking|\btoll\b/],
- ['Groceries',/shoprite|\bspar\b|ebeano|justrite|market square|supermarket|supermart|grocer|foodco|hubmart|\bmart\b|\bmarket\b/],
- ['Food & eating out',/chowdeck|glovo|jumia food|heyfood|chicken republic|\bkfc\b|domino|pizza|cold ?stone|mr ?biggs|sweet sensation|tantalizers|the place|kilimanjaro|bukka|\bbuka\b|restaurant|eatery|\bcafe|kitchen|grill|suya|shawarma|\bfood|burger|\bchops\b/],
- ['Fun & outings',/cinema|filmhouse|genesis|lounge|\bclub\b|\bbar\b|hotel|\bevent|ticket|arcade|\bspa\b|salon|barb/],
- ['Shopping',/jumia|konga|temu|aliexpress|shein|amazon|\bmall\b|fashion|boutique|\bstores?\b|clothing|\bwears?\b|\bslot\b|pointek|electronics/],
- ['Health',/pharmac|hospital|clinic|medplus|\bhmo\b|health|\blab\b|diagnost|dental|optical/],
- ['Education',/school|tuition|university|college|\bwaec\b|\bjamb\b|\bneco\b|course|udemy|coursera|\bexam|academy/],
- ['Giving & tithes',/tithe|offering|church|chapel|mosque|zakat|donation|charity|ministry/],
- ['Rent & housing',/\brent\b|landlord|house rent|apartment|caution fee|agency fee/],
- ['Cash withdrawals',/\batm\b|cash wd|cash withdrawal|\bwdl\b|withdrawal|cash out/],
+ ['Subscriptions',/netflix|spotify|showmax|apple\.com|itunes|icloud|youtube|google ?\*|google play|prime video|amazon prime|audiomack|boomplay|canva|chatgpt|openai|subscription|\bdstv\b|\bgotv\b|startimes|hulu|disney|hbo|paramount|apple music|dropbox|microsoft|adobe|github|patreon|twitch|audible|deezer|dazn|abonnement/],
+ ['Loan repayments',/\bloan|repayment|\brepay\b|fairmoney|palmcredit|\bcarbon\b|okash|renmoney|quickcheck|aella|easemoni|credit card|klarna|afterpay|affirm|student loan|pr[eê]t|darlehen/],
+ ['Bills & power',/ikedc|ekedc|aedc|phed|kedco|eedc|ibedc|\bbedc|\bjed\b|electricity|\belectric\b|prepaid|\btoken\b|\bnepa\b|water bill|lawma|waste|spectranet|\bsmile\b|ipnx|fib(re|er)|starlink|internet|broadband|utility|utilities|comcast|verizon|at&t|spectrum|con ?edison|national grid|british gas|\bedf\b|eskom|kplc|kenya power|\becg\b|council tax|strom|[eé]lectricit|gas bill|water/],
+ ['Airtime & data',/airtime|data bundle|\bdata\b|recharge|\bvtu\b|\bmtn\b|\bglo\b|airtel|9mobile|etisalat|safaricom|vodacom|telkom|t-mobile|vodafone|cellular|mobile top/],
+ ['Transport',/\buber\b|\bbolt\b|taxify|indrive|\brida\b|gokada|lagride|\bbrt\b|cowry|\bfuel\b|petrol|filling station|total ?energies|\bmobil\b|conoil|oando|\bnnpc\b|ardova|\bfare\b|transport|parking|\btoll\b|lyft|metro|subway|railway|trenitalia|sncf|\bbus\b|\bshell\b|\bbp\b|esso|chevron|texaco|taxi|careem|little cab|bahn|\bbvg\b|oyster/],
+ ['Groceries',/shoprite|\bspar\b|ebeano|justrite|market square|supermarket|supermart|grocer|foodco|hubmart|\bmart\b|\bmarket\b|walmart|kroger|costco|aldi|lidl|tesco|sainsbury|asda|carrefour|edeka|rewe|mercadona|woolworths|pick n pay|checkers|naivas|quickmart|trader joe|whole foods|albert heijn/],
+ ['Food & eating out',/chowdeck|glovo|jumia food|heyfood|chicken republic|\bkfc\b|domino|pizza|cold ?stone|mr ?biggs|sweet sensation|tantalizers|the place|kilimanjaro|bukka|\bbuka\b|restaurant|eatery|\bcafe|kitchen|grill|suya|shawarma|\bfood|burger|\bchops\b|mcdonald|starbucks|uber ?eats|doordash|deliveroo|just eat|grubhub|wolt|nando|coffee|bakery|\bpub\b|bistro/],
+ ['Fun & outings',/cinema|filmhouse|genesis|lounge|\bclub\b|\bbar\b|hotel|\bevent|ticket|arcade|\bspa\b|salon|barb|theatre|theater|concert|airbnb|booking\.com|steam games|playstation|xbox/],
+ ['Shopping',/jumia|konga|temu|aliexpress|shein|amazon|\bmall\b|fashion|boutique|\bstores?\b|clothing|\bwears?\b|\bslot\b|pointek|electronics|ebay|etsy|zalando|ikea|target|best buy|argos|takealot|h&m|\bzara\b|primark/],
+ ['Health',/pharmac|hospital|clinic|medplus|\bhmo\b|health|\blab\b|diagnost|dental|optical|cvs|walgreens|boots|doctor|physio|medical|insurance|apotheke|farmacia/],
+ ['Education',/school|tuition|university|college|\bwaec\b|\bjamb\b|\bneco\b|course|udemy|coursera|\bexam|academy|student|textbook/],
+ ['Giving & tithes',/tithe|offering|church|chapel|mosque|zakat|donation|charity|ministry|gofundme|red cross|unicef|kollekte/],
+ ['Rent & housing',/\brent\b|landlord|house rent|apartment|caution fee|agency fee|mortgage|miete|loyer|alquiler|property tax|\bhoa\b|lease/],
+ ['Cash withdrawals',/\batm\b|cash wd|cash withdrawal|\bwdl\b|withdrawal|cash out|cash advance|geldautomat|retrait|retiro/],
  ['Transfers to people',/trf to|transfer to|\bnip\b|\btrf\b|transfer|\bto\b/]
 ];
 const CR=[
- ['Salary & income',/salary|\bsal\b|payroll|wages|stipend|allowance|bonus|dividend|interest/],
+ ['Salary & income',/salary|\bsal\b|payroll|wages|stipend|allowance|bonus|dividend|interest|direct dep|gehalt|salaire|sueldo|\blohn\b|\bpaye\b|pension|benefit|tax refund/],
  ['Betting',new RegExp(BETS)],
  ['Savings & investing',/saving|piggyvest|cowrywise|risevest|bamboo|trove|safelock|\bvault\b|target sav|\binvest|autosave/],
- ['Refunds',/reversal|\brvsl\b|refund|reversed|chargeback|cashback/]
+ ['Refunds',/reversal|\brvsl\b|refund|reversed|chargeback|cashback|storno|remboursement|reembolso|erstattung/]
 ];
 function categorize(desc,credit){const d=desc.toLowerCase();for(const [c,rx] of (credit?CR:DR))if(rx.test(d))return c;return credit?'Transfers in':'Other spending';}
 function merchantKey(desc){
@@ -354,7 +379,7 @@ function merchantKey(desc){
   return w?w.toLowerCase().replace(/\b[a-z]/g,c=>c.toUpperCase()):'Unknown';
 }
 let idSeq=0;
-function enrich(t,src){const credit=t.amt>0;const cat=categorize(t.desc,credit);return{id:src+'-'+(idSeq++).toString(36)+Math.random().toString(36).slice(2,6),date:t.date,desc:t.desc,amt:Math.round(t.amt*100)/100,cat,type:typeOf(cat,credit),mk:merchantKey(t.desc),src,tagged:false};}
+function enrich(t,src){const credit=t.amt>0;const cat=categorize(t.desc,credit);return{id:src+'-'+(idSeq++).toString(36)+Math.random().toString(36).slice(2,6),date:t.date,desc:t.desc,amt:Math.round(t.amt*100)/100,cat,type:typeOf(cat,credit),mk:merchantKey(t.desc),src,tagged:false,cur:CUR};}
 
 /* ================= sample statement (fictional) ================= */
 function makeSample(){
@@ -391,42 +416,82 @@ function makeSample(){
 }
 let DEMO=null;
 const demoTxns=()=>DEMO||(DEMO=makeSample().map(t=>enrich(t,'demo')));
-const getTxns=()=>S.demo?demoTxns():S.txns;
+const activeCur=()=>S.demo?'NGN':(CUR_MAP[S.cur]?S.cur:'NGN');
+const getTxns=()=>{setCur(activeCur());return S.demo?demoTxns():S.txns.filter(t=>(t.cur||'NGN')===S.cur);};
 
 /* ================= statement parsing (runs on this device) ================= */
-const MONTHS={jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,sept:9,oct:10,nov:11,dec:12};
+const M4={juin:6,juil:7,janv:1,febr:2,sept:9,mars:3};
+const M3={jan:1,feb:2,fev:2,mar:3,mrt:3,mär:3,mrz:3,apr:4,avr:4,abr:4,may:5,mai:5,mag:5,mei:5,jun:6,giu:6,jul:7,lug:7,aug:8,ago:8,aou:8,sep:9,set:9,oct:10,okt:10,out:10,ott:10,nov:11,dec:12,dez:12,dic:12,ene:1,gen:1};
+const MONTHS=new Proxy({},{get:(_,w)=>monthNum(String(w))});
+function monthNum(w){w=w.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');if(M4[w.slice(0,4)])return M4[w.slice(0,4)];return M3[w.slice(0,3)]||null;}
+const MWORD='[A-Za-z\\u00C0-\\u017F]{3,9}';
 function mkISO(y,m,d){y=+y;if(y<100)y+=2000;m=+m;d=+d;if(!(m>=1&&m<=12&&d>=1&&d<=31&&y>=2000&&y<=2100))return null;const dt=new Date(Date.UTC(y,m-1,d));return dt.getUTCMonth()===m-1?dt.toISOString().slice(0,10):null;}
 function findDates(s,dayFirst){
   const out=[];const push=(m,iso)=>{if(iso)out.push({iso,start:m.index,end:m.index+m[0].length});};
   for(const m of s.matchAll(/\b(\d{4})[-\/.](\d{1,2})[-\/.](\d{1,2})(?:[T ]\d{1,2}:\d{2}(?::\d{2})?)?\b/g))push(m,mkISO(m[1],m[2],m[3]));
   for(const m of s.matchAll(/\b(\d{1,2})[-\/.](\d{1,2})[-\/.](\d{4}|\d{2})\b/g))push(m,dayFirst?mkISO(m[3],m[2],m[1]):mkISO(m[3],m[1],m[2]));
-  for(const m of s.matchAll(/\b(\d{1,2})(?:st|nd|rd|th)?[-\s\/.]*(jan|feb|mar|apr|may|jun|jul|aug|sept?|oct|nov|dec)[a-z]*\.?[-\s\/.,]*(\d{4}|\d{2})\b/gi))push(m,mkISO(m[3],MONTHS[m[2].toLowerCase()],m[1]));
-  for(const m of s.matchAll(/\b(jan|feb|mar|apr|may|jun|jul|aug|sept?|oct|nov|dec)[a-z]*\.?\s+(\d{1,2}),?\s+(\d{4})\b/gi))push(m,mkISO(m[3],MONTHS[m[1].toLowerCase()],m[2]));
+  for(const m of s.matchAll(new RegExp('\\b(\\d{1,2})(?:st|nd|rd|th|er)?[-\\s\\/.]*('+MWORD+')\\.?[-\\s\\/.,]*(?:de\\s+)?(\\d{4}|\\d{2})\\b','gi'))){const mo=monthNum(m[2]);if(mo)push(m,mkISO(m[3],mo,m[1]));}
+  for(const m of s.matchAll(new RegExp('\\b('+MWORD+')\\.?\\s+(\\d{1,2})(?:st|nd|rd|th)?,?\\s+(\\d{4})\\b','gi'))){const mo=monthNum(m[1]);if(mo)push(m,mkISO(m[3],mo,m[2]));}
   out.sort((a,b)=>a.start-b.start||b.end-a.end);
   const res=[];for(const d of out){if(res.length&&d.start<res[res.length-1].end)continue;res.push(d);}return res;
 }
+// Parsing context for the statement being read: decimal mark and money-symbol handling.
+const PARSE={dec:'.'};
+const CURTOK='(?:[A-Za-z]{3}|[$€£¥₹₦₵₪₨₩]|R\\$|US\\$|CA\\$|A\\$|N\\$|MX\\$|S\\$|GH₵|E£|KSh|TSh|USh|FCFA|CFA|zł|Kč|kr|Ft|lei|Br|Kz|MT|DA|DT|Rs|RF|ZK|N|R|P)';
+function cleanNum(raw){
+  // raw: digits with , . ' space nbsp separators. Returns a JS number or null, using PARSE.dec as the decimal mark.
+  let n=raw.replace(/[   ']/g,m=>m);
+  n=n.replace(/(?<=\d)[   '](?=\d{3}(?!\d))/g,'');
+  if(/[   ']/.test(n))return null;
+  const dec=PARSE.dec,th=dec==='.'?',':'.';
+  if(n.includes(th)&&!new RegExp('^\\d{1,3}(\\'+th+'\\d{3})+(\\'+dec+'\\d{1,3})?$').test(n)){
+    if(dec===','&&/^\d+\.\d{1,2}$/.test(n)&&!n.includes(','))return parseFloat(n);   // numeric Excel cells keep a dot
+    return null;
+  }
+  if(n.includes(dec)&&n.split(dec).length>2)return null;
+  if(dec===','&&!n.includes(',')&&/^\d+\.\d{1,2}$/.test(n))return parseFloat(n);
+  const v=parseFloat(n.split(th).join('').replace(dec,'.'));
+  return isFinite(v)?v:null;
+}
 function moneyCell(t){
-  const s=t.trim();
+  const s=t.trim().replace(/−/g,'-');
   if(!s||/^[-–—]+$/.test(s))return{empty:true};
-  const m=s.match(/^(\(?)\s*([-+]?)\s*(?:₦|NGN|N)?\s*([-+]?)\s*(\d[\d,]*)(\.\d{1,2})?\s*(\)?)\s*(CR|DR)?\.?$/i);
+  const m=s.match(new RegExp('^(\\(?)\\s*([-+]?)\\s*(?:'+CURTOK+')?\\s*([-+]?)\\s*(\\d[\\d.,\\u00a0\\u202f \']*)\\s*(?:'+CURTOK+')?\\s*(-|\\+)?\\s*(\\)?)\\s*(CR|DR|Cr|Dr|cr|dr)?\\.?$'));
   if(!m)return null;
-  const ip=m[4],dec=m[5]||'';
-  if(ip.includes(',')&&!/^\d{1,3}(,\d{3})+$/.test(ip))return null;
-  const digits=ip.replace(/,/g,'');
-  const signed=m[1]==='('||!!m[2]||!!m[3]||!!m[7];
-  if(!dec&&!ip.includes(',')&&digits.length>=9)return null;
-  if(!dec&&!ip.includes(',')&&!signed&&digits.length===4&&+digits>=1990&&+digits<=2099)return null;
-  const v=parseFloat(digits+dec);
-  let sign=0;if(m[2]==='+'||m[3]==='+')sign=1;if(m[1]==='('||m[2]==='-'||m[3]==='-')sign=-1;if(m[7])sign=m[7].toUpperCase()==='DR'?-1:1;
+  const ip=m[4].replace(/[.,\s]+$/,'');
+  const v=cleanNum(ip);
+  if(v==null)return null;
+  const hasDec=new RegExp('['+(PARSE.dec==='.'?'\\.':',')+']\\d{1,3}$').test(ip)||(PARSE.dec===','&&/^\d+\.\d{1,2}$/.test(ip));
+  const hasSep=/[.,\s  ']/.test(ip);
+  const signed=m[1]==='('||!!m[2]||!!m[3]||!!m[5]||!!m[7];
+  const digits=ip.replace(/\D/g,'');
+  if(!hasDec&&!hasSep&&digits.length>=11)return null;
+  if(!hasDec&&!hasSep&&!signed&&digits.length===4&&+digits>=1990&&+digits<=2099)return null;
+  let sign=0;
+  if(m[2]==='+'||m[3]==='+'||m[5]==='+')sign=1;
+  if(m[1]==='('||m[2]==='-'||m[3]==='-'||m[5]==='-')sign=-1;
+  if(m[7])sign=m[7].toUpperCase()==='DR'?-1:1;
   return{money:{v,sign},zero:v===0};
 }
-const MONEY_IN_TEXT=/(^|\s)(\(?[-+]?(?:₦|NGN)?\s?(?:\d{1,3}(?:,\d{3})+|\d+)\.\d{2}\)?(?:\s?(?:CR|DR)\b)?)(?=\s|$)/gi;
+function moneyInTextRe(){
+  const dec=PARSE.dec==='.'?'\\.':',',th=PARSE.dec==='.'?'[, ]':"[. '\\u00a0]";
+  return new RegExp('(^|\\s)(\\(?[-+\\u2212]?(?:'+CURTOK+')?\\s?(?:\\d{1,3}(?:'+th+'\\d{3})+|\\d+)'+dec+'\\d{2}-?\\)?(?:\\s?(?:CR|DR)\\b)?)(?=\\s|$)','gi');
+}
 const NOISE=/page \d|\bof \d+\b|statement of account|account (no|number|name|type)|customer|generated|printed|www\.|http|e-?mail|phone|tel:|address|branch:|currency|period|dear |disclaimer|this statement|kindly|thank you/i;
-const H={vdate:/value\s*date/i,balance:/balance|^bal\.?$/i,debit:/debit|withdrawal|money out|paid out|outflow|^dr$/i,credit:/credit|deposit|lodgement|money in|paid in|inflow|^cr$/i,amount:/^(amount|amount\s*\(?ngn\)?|transaction amount|amt)$/i,date:/date/i,desc:/narration|description|details|remarks|particulars|memo|narrative|beneficiary/i};
+const H={
+ sign:/^(type|dr\/cr|cr\/dr|d\/c|c\/d|indicator|sens|cdt\/?dbt|dbit\/?crdt|debit\/credit|credit\/debit|transaction type|txn type)$/i,
+ vdate:/value\s*date|valuta|fecha valor|data valor|date de valeur|wertstellung/i,
+ balance:/balance|^bal\.?$|solde|saldo|kontostand/i,
+ debit:/debit|d[eé]bit|d[eé]bito|withdrawal|money out|paid out|outflow|^dr$|soll|belastung|uitgave|^af$|retiro|cargo|sa[ií]da|sortie|payments?\b|spent/i,
+ credit:/credit|cr[eé]dit|cr[eé]dito|deposit|lodgement|money in|paid in|inflow|^cr$|haben|gutschrift|^bij$|abono|dep[oó]sito|entrada|entr[eé]e|receipts?\b/i,
+ amount:/^(amount|amount\s*\(?[a-z]{3}\)?|transaction amount|amt|montant|importe|betrag|bedrag|importo|valor|valeur|montant\s*\(?[a-z]{3}\)?|betrag\s*\(?[a-z]{3}\)?)$/i,
+ date:/date|fecha|datum|^data$|buchung|booking|posted|posting|jour/i,
+ desc:/narration|description|details|remarks|particulars|memo|narrative|beneficiary|libell[eé]|concepto|descripci[oó]n|verwendungszweck|buchungstext|omschrijving|descri[cç][aã]o|descrizione|causale|payee|merchant|reference/i
+};
 function detectHeader(cells){
   const idx={};
   cells.forEach((raw,i)=>{const t=raw.trim().toLowerCase();if(!t||t.length>40)return;
-    for(const k of ['vdate','balance','debit','credit','amount','date','desc']){if(H[k].test(t)){if(idx[k]==null)idx[k]=i;return;}}});
+    for(const k of ['sign','vdate','balance','debit','credit','amount','date','desc']){if(H[k].test(t)){if(idx[k]==null)idx[k]=i;return;}}});
   if(idx.date==null&&idx.vdate!=null)idx.date=idx.vdate;
   return idx.date!=null&&((idx.debit!=null&&idx.credit!=null)||idx.amount!=null)&&(idx.desc!=null||idx.balance!=null)?idx:null;
 }
@@ -441,7 +506,7 @@ function rowToRec(cells,ctx){
     const a=moneyCell(t);
     if(a&&a.empty)return;
     if(a&&a.money){amounts.push({...a.money,zero:a.zero,x:c.x0!=null?(c.x0+c.x1)/2:null});return;}
-    t=t.replace(MONEY_IN_TEXT,(all,pre,tok)=>{const b=moneyCell(tok);if(b&&b.money){amounts.push({...b.money,zero:b.zero,x:null});return pre;}return all;});
+    t=t.replace(moneyInTextRe(),(all,pre,tok)=>{const b=moneyCell(tok);if(b&&b.money){amounts.push({...b.money,zero:b.zero,x:null});return pre;}return all;});
     parts.push(t);
   });
   return{date:dates.length?dates[0].iso:null,desc:parts.join(' ').replace(/\s+/g,' ').trim(),amounts};
@@ -449,12 +514,12 @@ function rowToRec(cells,ctx){
 function mappedRec(cells,h,ctx){
   const get=i=>i!=null&&cells[i]?cells[i].t:'';
   const d1=findDates(get(h.date),ctx.dayFirst)[0]||findDates(cells.map(c=>c.t).join(' '),ctx.dayFirst)[0];
-  const used=[h.date,h.vdate,h.debit,h.credit,h.amount,h.balance];
+  const used=[h.date,h.vdate,h.debit,h.credit,h.amount,h.balance,h.sign];
   const desc=h.desc!=null?get(h.desc):cells.filter((c,i)=>!used.includes(i)).map(c=>c.t).join(' ');
   const val=i=>{if(i==null)return null;const a=moneyCell(get(i));return a&&a.money?a.money:null;};
   const r={date:d1?d1.iso:null,desc:desc.replace(/\s+/g,' ').trim(),mapped:true,amt:null,sign:0,definite:false,balance:null};
   if(h.debit!=null&&h.credit!=null){const d=val(h.debit),c=val(h.credit);if(d&&d.v>0){r.amt=d.v;r.sign=-1;r.definite=true;}else if(c&&c.v>0){r.amt=c.v;r.sign=1;r.definite=true;}}
-  else{const a=val(h.amount);if(a&&a.v>0){r.amt=a.v;r.sign=a.sign;r.definite=a.sign!==0;}}
+  else{const a=val(h.amount);if(a&&a.v>0){r.amt=a.v;r.sign=a.sign;if(!r.sign&&h.sign!=null){const k=get(h.sign).trim().toLowerCase();if(/^(d|dr|debit|dbit|d[eé]bito?|soll|out|withdrawal|retrait|-)/.test(k))r.sign=-1;else if(/^(c|cr|credit|crdt|cr[eé]dit|cr[eé]dito|haben|in|deposit|\+)/.test(k))r.sign=1;}r.definite=r.sign!==0;}}
   const b=val(h.balance);if(b)r.balance=b.v*(b.sign<0?-1:1);
   return r;
 }
@@ -481,14 +546,50 @@ function finalizeAmounts(r,cols){
 function keywordSign(desc){
   const d=desc.toLowerCase();
   if(new RegExp('('+BETS+').*(withdraw|payout|winning)').test(d))return 1;
-  if(/salary|\bsal\b|payroll|trf from|transfer from|\bfrm\b|\bfrom\b|inward|\bcr\b|credit|reversal|rvsl|refund|interest paid|deposit|lodg|received/.test(d))return 1;
+  if(/salary|\bsal\b|payroll|trf from|transfer from|\bfrm\b|\bfrom\b|inward|\bcr\b|credit|reversal|rvsl|refund|interest paid|deposit|lodg|received|direct dep|dividend|gehalt|salaire|sueldo|virement re[cç]u|transferencia recibida/.test(d))return 1;
   return -1;
 }
-function parseStatement(rows,kind){
+function detectDec(sample){
+  const t=sample.replace(/\b\d{1,4}[-\/.]\d{1,2}[-\/.]\d{1,4}\b/g,' ').replace(/\b\d{1,2}:\d{2}(:\d{2})?\b/g,' ');
+  const dots=(t.match(/\d\.\d{2}(?!\d)/g)||[]).length,commas=(t.match(/\d,\d{2}(?!\d)/g)||[]).length;
+  const dotTh=(t.match(/\d\.\d{3},\d{2}(?!\d)/g)||[]).length,comTh=(t.match(/\d,\d{3}\.\d{2}(?!\d)/g)||[]).length;
+  if(dotTh>comTh)return',';if(comTh>dotTh)return'.';
+  return commas>dots*1.5&&commas>=2?',':'.';
+}
+function detectDayFirst(sample,cur){
+  let a12=false,b12=false;const pairs=[];
+  for(const m of sample.matchAll(/\b(\d{1,2})[-\/.](\d{1,2})[-\/.](\d{2,4})\b/g)){if(+m[1]>12)a12=true;if(+m[2]>12)b12=true;pairs.push(m);}
+  if(a12&&!b12)return true;if(b12&&!a12)return false;
+  if(pairs.length>=4){
+    const inv=df=>{let n=0,prev=null;for(const m of pairs){const iso=df?mkISO(m[3],m[2],m[1]):mkISO(m[3],m[1],m[2]);if(!iso)return 1e9;if(prev&&iso<prev)n++;prev=iso;}return n;};
+    const asc=inv(true),mf=inv(false);
+    const desc=df=>{let n=0,prev=null;for(const m of pairs){const iso=df?mkISO(m[3],m[2],m[1]):mkISO(m[3],m[1],m[2]);if(!iso)return 1e9;if(prev&&iso>prev)n++;prev=iso;}return n;};
+    const dA=Math.min(asc,desc(true)),mA=Math.min(mf,desc(false));
+    if(dA<mA)return true;if(mA<dA)return false;
+  }
+  return !(cur==='USD'||cur==='CAD'||cur==='PHP');
+}
+const BANK_HINT=[[/\b(nip|access bank|gtbank|gtco|zenith|uba\b|first ?bank|fidelity bank|opay|kuda|moniepoint|palmpay|stanbic ibtc|wema|sterling bank|union bank|polaris|ecobank nigeria|nibss|nip\/)/i,'NGN'],[/\b(chase|bank of america|wells fargo|citibank|capital one|us bank|pnc|ally bank|discover|american express|navy federal)\b/i,'USD'],[/\b(barclays|lloyds|natwest|nationwide|monzo|starling|santander uk|halifax|hsbc uk|sort code)\b/i,'GBP'],[/\b(standard bank|fnb|absa|nedbank|capitec|discovery bank|tymebank)\b/i,'ZAR'],[/\b(equity bank|kcb|m-?pesa|safaricom|co-?operative bank of kenya|ncba)\b/i,'KES'],[/\b(cib egypt|national bank of egypt|banque misr)\b/i,'EGP'],[/\b(attijariwafa|cih bank|bank of africa maroc)\b/i,'MAD'],[/\b(gcb bank|mtn mobile money ghana|ghipss)\b/i,'GHS']];
+const IBAN_CUR={DE:'EUR',FR:'EUR',ES:'EUR',IT:'EUR',NL:'EUR',BE:'EUR',AT:'EUR',PT:'EUR',IE:'EUR',FI:'EUR',GR:'EUR',LU:'EUR',SK:'EUR',SI:'EUR',EE:'EUR',LV:'EUR',LT:'EUR',MT:'EUR',CY:'EUR',HR:'EUR',GB:'GBP',CH:'CHF',SE:'SEK',NO:'NOK',DK:'DKK',PL:'PLN',CZ:'CZK',HU:'HUF',RO:'RON',MA:'MAD',TN:'TND',EG:'EGP',DZ:'DZD',AE:'AED'};
+const REGION_CUR={US:'USD',CA:'CAD',GB:'GBP',NG:'NGN',ZA:'ZAR',KE:'KES',GH:'GHS',EG:'EGP',MA:'MAD',TZ:'TZS',UG:'UGX',RW:'RWF',ET:'ETB',DZ:'DZD',TN:'TND',ZM:'ZMW',BW:'BWP',NA:'NAD',MU:'MUR',MZ:'MZN',AO:'AOA',SN:'XOF',CI:'XOF',ML:'XOF',BF:'XOF',CM:'XAF',DE:'EUR',FR:'EUR',ES:'EUR',IT:'EUR',NL:'EUR',IE:'EUR',AT:'EUR',BE:'EUR',PT:'EUR',AU:'AUD',CH:'CHF',SE:'SEK',NO:'NOK',DK:'DKK',PL:'PLN',IN:'INR',AE:'AED',BR:'BRL',MX:'MXN'};
+function detectCurrency(text,hint){
+  const score={};const add=(c,n)=>{if(CUR_MAP[c])score[c]=(score[c]||0)+n;};
+  for(const c of Object.keys(CUR_MAP)){const n=(text.match(new RegExp('\\b'+c+'\\b','g'))||[]).length;if(n)add(c,n*3);}
+  add('NGN',(text.match(/₦/g)||[]).length*3);add('EUR',(text.match(/€/g)||[]).length*2);add('GBP',(text.match(/£/g)||[]).length*2);add('INR',(text.match(/₹/g)||[]).length*2);add('GHS',(text.match(/GH?₵|₵/g)||[]).length*2);
+  add('KES',(text.match(/\bKSh\.?\s?\d/gi)||[]).length*2);add('ZAR',(text.match(/(^|\s)R\s?\d[\d\s,.]*\d/gm)||[]).length*1);add('USD',(text.match(/\$\s?\d/g)||[]).length*1);
+  const ib=text.match(/\b([A-Z]{2})\d{2}[A-Z0-9]{10,30}\b/);if(ib&&IBAN_CUR[ib[1]])add(IBAN_CUR[ib[1]],2);
+  for(const [rx,c] of BANK_HINT)if(rx.test(text))add(c,2);
+  let best=null,bs=0;for(const c in score)if(score[c]>bs){bs=score[c];best=c;}
+  if(best)return best;
+  return CUR_MAP[hint]?hint:'NGN';
+}
+function localeCurrency(){try{const l=(navigator.language||'').split('-');return REGION_CUR[(l[1]||'').toUpperCase()]||null;}catch(e){return null;}}
+const CARDPAY=/payment|thank you|autopay|refund|credit|reversal|cashback|statement credit|paiement|zahlung|pago/i;
+function parseStatement(rows,kind,hint){
   const sample=rows.slice(0,500).map(r=>r.map(c=>c.t).join(' ')).join('\n');
-  let a12=false,b12=false;
-  for(const m of sample.matchAll(/\b(\d{1,2})[-\/.](\d{1,2})[-\/.](\d{2,4})\b/g)){if(+m[1]>12)a12=true;if(+m[2]>12)b12=true;}
-  const ctx={dayFirst:!(b12&&!a12)};
+  const cur=detectCurrency(sample,hint);
+  PARSE.dec=detectDec(sample);
+  const ctx={dayFirst:detectDayFirst(sample,cur)};
   let hdr=null,hdrRow=-1;
   for(let i=0;i<Math.min(rows.length,80);i++){const h=detectHeader(rows[i].map(c=>c.t));if(h){hdr=h;hdrRow=i;break;}}
   let cols=null;
@@ -535,7 +636,11 @@ function parseStatement(rows,kind){
   }
   if(orphans.length){const prev=lastRec();for(const o of orphans)if(prev&&prev.gy!=null&&Math.abs(o.gy-prev.gy)<20)prev.desc+=' '+o.t;}
   const dated=recs.filter(r=>!r.balOnly);
-  if(!dated.length)return{txns:[],method:hdr?'columns':'pattern'};
+  if(!dated.length)return{txns:[],method:hdr?'columns':'pattern',cur};
+  { // card statements: purchases are shown positive and payments negative. Flip when the negatives look like payments.
+    const neg=dated.filter(r=>r.definite&&r.sign===-1),rest=dated.filter(r=>!(r.definite&&r.sign===-1));
+    if(neg.length>=2&&rest.length>=2&&neg.filter(r=>CARDPAY.test(r.desc)).length/neg.length>=0.6&&rest.filter(r=>CARDPAY.test(r.desc)).length/rest.length<0.2){neg.forEach(r=>{r.sign=1;});rest.forEach(r=>{r.sign=-1;r.definite=true;});}
+  }
   const asc=dated[0].date<=dated[dated.length-1].date;
   const hasNeg=dated.some(r=>r.sign===-1);
   for(let i=0;i<recs.length;i++){
@@ -548,7 +653,75 @@ function parseStatement(rows,kind){
     r.sign=s;
   }
   const txns=dated.map(r=>({date:r.date,desc:(r.desc||'Transaction').replace(/^[\s\-|:\/]+|[\s\-|:\/]+$/g,'').slice(0,160)||'Transaction',amt:r.sign*r.amt}));
-  return{txns,method:hdr?'columns':'pattern'};
+  return{txns,method:hdr?'columns':'pattern',cur};
+}
+/* ---- structured bank files: OFX/QFX, QIF, MT940, CAMT.053 (all parsed on this device) ---- */
+function sniffStructured(text){
+  const h=text.slice(0,4000);
+  if(/OFXHEADER|<OFX[>\s]/i.test(h)||/<STMTTRN>/i.test(text))return'ofx';
+  if(/<BkToCstmrStmt|camt\.053|<Ntry>/i.test(text))return'camt';
+  if(/^\s*!Type:/mi.test(h))return'qif';
+  if(/^:20:/m.test(text)&&/^:61:/m.test(text))return'mt940';
+  return null;
+}
+function parseStructured(text,hint){
+  const kind=sniffStructured(text);if(!kind)return null;
+  PARSE.dec='.';
+  const txns=[];let cur=null;
+  const clean=v=>String(v||'').replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&apos;/g,"'").replace(/\s+/g,' ').trim();
+  if(kind==='ofx'){
+    const cd=text.match(/<CURDEF>\s*([A-Za-z]{3})/i);if(cd)cur=cd[1].toUpperCase();
+    for(const blk of text.split(/<STMTTRN>/i).slice(1)){
+      const tag=t=>{const m=blk.match(new RegExp('<'+t+'>\\s*([^<\\r\\n]*)','i'));return m?m[1].trim():'';};
+      const dt=tag('DTPOSTED').match(/^(\d{4})(\d{2})(\d{2})/);const iso=dt?mkISO(dt[1],dt[2],dt[3]):null;
+      const amt=parseFloat(tag('TRNAMT').replace(',','.'));
+      if(!iso||!isFinite(amt)||amt===0)continue;
+      txns.push({date:iso,desc:clean([tag('NAME'),tag('MEMO')].filter(Boolean).join(' ')).slice(0,160)||'Transaction',amt});
+    }
+  }else if(kind==='camt'){
+    const cd=text.match(/<Amt[^>]*Ccy="([A-Z]{3})"/);if(cd)cur=cd[1];
+    for(const blk of text.split(/<Ntry>/).slice(1)){
+      const am=blk.match(/<Amt[^>]*>\s*([\d.,]+)/);const ind=blk.match(/<CdtDbtInd>\s*(DBIT|CRDT)/);
+      const dm=blk.match(/<BookgDt>[\s\S]*?(\d{4})-(\d{2})-(\d{2})/)||blk.match(/<ValDt>[\s\S]*?(\d{4})-(\d{2})-(\d{2})/);
+      if(!am||!ind||!dm)continue;
+      const iso=mkISO(dm[1],dm[2],dm[3]);const v=parseFloat(am[1].replace(',','.'));if(!iso||!isFinite(v)||v===0)continue;
+      const pick=t=>{const m=blk.match(new RegExp('<'+t+'>\\s*([^<]*)'));return m?m[1]:'';};
+      const who=ind[1]==='DBIT'?(blk.match(/<Cdtr>[\s\S]*?<Nm>([^<]*)/)||[])[1]:(blk.match(/<Dbtr>[\s\S]*?<Nm>([^<]*)/)||[])[1];
+      txns.push({date:iso,desc:clean([who,pick('Ustrd'),pick('AddtlNtryInf')].filter(Boolean).join(' ')).slice(0,160)||'Transaction',amt:ind[1]==='DBIT'?-v:v});
+    }
+  }else if(kind==='qif'){
+    const lines=text.replace(/\r/g,'').split('\n');const recs=[];let r={};
+    for(const ln of lines){const c=ln[0],v=ln.slice(1).trim();if(c==='^'){if(r.D&&r.T)recs.push(r);r={};}else if('DTPM'.includes(c))r[c]=v;}
+    if(r.D&&r.T)recs.push(r);
+    const sample=recs.map(x=>x.D.replace(/'/g,'/')).join('\n');
+    const dayFirst=detectDayFirst(sample,hint);
+    PARSE.dec=detectDec(recs.map(x=>x.T).join(' ')+' ');
+    for(const x of recs){
+      const d=findDates(x.D.replace(/'(\d\d)$/,'/20$1').replace(/'/g,'/'),dayFirst)[0];const mc=moneyCell(x.T.replace(/\s/g,''));
+      if(!d||!mc||!mc.money||mc.money.v===0)continue;
+      txns.push({date:d.iso,desc:clean([x.P,x.M].filter(Boolean).join(' ')).slice(0,160)||'Transaction',amt:(mc.money.sign<0?-1:1)*mc.money.v});
+    }
+  }else if(kind==='mt940'){
+    const cd=text.match(/:6[02][FM]:[CD]\d{6}([A-Z]{3})/);if(cd)cur=cd[1];
+    const lines=text.replace(/\r/g,'').split('\n');let last=null;
+    for(const ln of lines){
+      const m=ln.match(/^:61:(\d{2})(\d{2})(\d{2})(?:\d{4})?(R?[DC])[A-Z]?(\d+,\d*)/);
+      if(m){const iso=mkISO(m[1],m[2],m[3]);const v=parseFloat(m[5].replace(',','.'));last=null;
+        if(iso&&isFinite(v)&&v>0){last={date:iso,desc:'',amt:(m[4]==='D'||m[4]==='RC')?-v:v};txns.push(last);}continue;}
+      if(/^:86:/.test(ln)&&last){last.desc=clean(ln.slice(4)).replace(/\?\d{2}/g,' ');continue;}
+      if(last&&!/^:/.test(ln)&&ln.trim()&&!/^-$/.test(ln.trim()))last.desc=clean(last.desc+' '+ln.replace(/\?\d{2}/g,' '));
+      else if(/^:\d/.test(ln)&&!/^:86:/.test(ln))last=null;
+    }
+    txns.forEach(t=>{t.desc=(t.desc||'Transaction').slice(0,160);});
+  }
+  return{txns,method:kind,cur:CUR_MAP[cur]?cur:detectCurrency(text.slice(0,6000),hint)};
+}
+function decodeText(buf){
+  const u=new Uint8Array(buf);
+  if(u[0]===0xFF&&u[1]===0xFE)return new TextDecoder('utf-16le').decode(buf).replace(/^﻿/,'');
+  if(u[0]===0xFE&&u[1]===0xFF)return new TextDecoder('utf-16be').decode(buf).replace(/^﻿/,'');
+  try{return new TextDecoder('utf-8',{fatal:true}).decode(buf).replace(/^﻿/,'');}
+  catch(e){try{return new TextDecoder('windows-1252').decode(buf);}catch(e2){return new TextDecoder().decode(buf);}}
 }
 function splitCSV(line,delim){const out=[];let cur='',q=false;for(let i=0;i<line.length;i++){const c=line[i];if(q){if(c==='"'){if(line[i+1]==='"'){cur+='"';i++;}else q=false;}else cur+=c;}else if(c==='"')q=true;else if(c===delim){out.push(cur);cur='';}else cur+=c;}out.push(cur);return out.map(s=>s.trim());}
 function textToRows(text){
@@ -608,7 +781,7 @@ function analyze(txns){
       if(t.cat==='Betting'){betOut+=a;betN++;}
       if(t.type!=='saving')byMonth[mo].out+=a;
       if(t.type==='want'){wkAll+=a;const w=dow(t.date);if(w===0||w===5||w===6)wkEnd+=a;}
-      if(a<2000&&t.type!=='fee'){tiny.n++;tiny.sum+=a;}
+      if(a<localScale(2000)&&t.type!=='fee'){tiny.n++;tiny.sum+=a;}
       if(t.type==='fee'){const d=t.desc.toLowerCase();feeParts[/sms|alert/.test(d)?'sms':/levy|emtl|stamp/.test(d)?'levy':/nip|trf|transfer/.test(d)?'transfer':/maint/.test(d)?'maint':'other']+=a;}
       if(!['transfer','cash','fee','saving','giving'].includes(t.type)){const k=t.mk;merch[k]=merch[k]||{name:k,sum:0,n:0,cat:t.cat};merch[k].sum+=a;merch[k].n++;}
       if(t.type!=='saving'&&(!biggest||a>biggest.a))biggest={a,t};
@@ -664,10 +837,10 @@ function traitsOf(A){
   const m=A.m,inc=Math.max(1,m.income),spend=Math.max(1,m.spend),T=[];
   if(A.front!=null&&A.front>=0.38)T.push({id:'sprinter',s:clamp((A.front-0.3)/0.4,0,1),ev:`${pct(A.front)} of your lifestyle spending happens in the first 7 days after payday. An even pace would be about 23%.`});
   if(A.weekendShare!=null&&A.weekendShare>=0.58)T.push({id:'weekend',s:clamp((A.weekendShare-0.5)/0.35,0,1),ev:`${pct(A.weekendShare)} of lifestyle spending lands on Friday to Sunday.`});
-  if(A.tinyN/A.months>=20&&m.tiny>=0.04*inc)T.push({id:'drip',s:clamp(m.tiny/inc/0.1,0,1),ev:`About ${Math.round(A.tinyN/A.months)} small spends under ₦2,000 a month add up to ${naira(m.tiny)}.`});
+  if(A.tinyN/A.months>=20&&m.tiny>=0.04*inc)T.push({id:'drip',s:clamp(m.tiny/inc/0.1,0,1),ev:`About ${Math.round(A.tinyN/A.months)} small spends under ${money(localScale(2000))} a month add up to ${money(m.tiny)}.`});
   const tShare=(m.transfer+m.giving)/spend;if(tShare>=0.2)T.push({id:'pillar',s:clamp((tShare-0.15)/0.3,0,1),ev:`${pct(tShare)} of what you spend goes to other people through transfers and giving.`});
-  if(m.cash/spend>=0.15)T.push({id:'cash',s:clamp(m.cash/spend/0.35,0,1),ev:`${naira(m.cash)} a month leaves as cash, which your coach can't follow.`});
-  if(m.betOut>=0.03*inc||A.betN/A.months>=6)T.push({id:'risk',s:clamp(m.betOut/inc/0.08,0.3,1),ev:`You stake about ${naira(m.betOut)} a month on betting (${Math.round(A.betN/A.months)} bets), ${naira(Math.max(0,m.betNet))} net after wins.`});
+  if(m.cash/spend>=0.15)T.push({id:'cash',s:clamp(m.cash/spend/0.35,0,1),ev:`${money(m.cash)} a month leaves as cash, which your coach can't follow.`});
+  if(m.betOut>=0.03*inc||A.betN/A.months>=6)T.push({id:'risk',s:clamp(m.betOut/inc/0.08,0.3,1),ev:`You stake about ${money(m.betOut)} a month on betting (${Math.round(A.betN/A.months)} bets), ${money(Math.max(0,m.betNet))} net after wins.`});
   if(m.debt/inc>=0.15)T.push({id:'debt',s:clamp(m.debt/inc/0.35,0,1),ev:`${pct(m.debt/inc)} of your income goes to loan repayments.`});
   if(A.keptRate>=0.18)T.push({id:'builder',s:clamp(A.keptRate/0.35,0,1),ev:`You keep ${pct(A.keptRate)} of what you earn.`});
   return T.sort((a,b)=>b.s-a.s);
@@ -704,15 +877,15 @@ function scoreOf(A){
 /* ================= coach feed ================= */
 function nudges(A){
   const N=[],m=A.m;
-  if(A.keptRate<0)N.push({tone:'bad',w:100,title:`You spent ${naira(-m.kept)} a month more than you earned`,body:'Money going out is bigger than money coming in. The gap is usually covered by savings, loans or family, and it grows quietly.',acts:[['Start: Pay yourself first','start','pay-first'],['Read: A simple split','lesson','split']]});
+  if(A.keptRate<0)N.push({tone:'bad',w:100,title:`You spent ${money(-m.kept)} a month more than you earned`,body:'Money going out is bigger than money coming in. The gap is usually covered by savings, loans or family, and it grows quietly.',acts:[['Start: Pay yourself first','start','pay-first'],['Read: A simple split','lesson','split']]});
   if(A.front!=null&&A.front>=0.38)N.push({tone:'bad',w:90,title:`${pct(A.front)} of your lifestyle spending happens in the week after payday`,body:'An even pace would be about 23%. The first week sets the tone for the rest of the month.',acts:[['Start: Payday pause','start','payday-pause'],['Read: Why pay disappears','lesson','payday']]});
-  if(m.betOut>0)N.push({tone:m.betNet>0.03*m.income?'bad':'tip',w:85,title:`Betting cost you ${naira(Math.max(0,m.betNet))} a month after wins`,body:`You staked ${naira(m.betOut)} a month across about ${Math.round(A.betN/A.months)} bets. Wins brought back ${naira(m.betIn)}.`,acts:[['Start: No-bet week','start','no-bet'],['Read: The house edge','lesson','betting']]});
-  if(m.fees>=800)N.push({tone:'tip',w:60,title:`Bank fees and levies take ${naira(m.fees)} a month`,body:`That's ${naira(m.fees*12)} a year on alerts, transfer charges and levies. Part of it can be cut.`,acts:[['Start: Fee detox','start','fee-detox'],['Read: Small charges add up','lesson','fees']]});
-  if(A.subs.length>=2)N.push({tone:'tip',w:55,title:`${A.subs.length} subscriptions cost ${naira(A.subsM)} a month`,body:A.subs.slice(0,4).map(s=>s.name).join(', ')+'. Keep the ones you use every week.',acts:[['Start: Subscription audit','start','sub-audit']]});
+  if(m.betOut>0)N.push({tone:m.betNet>0.03*m.income?'bad':'tip',w:85,title:`Betting cost you ${money(Math.max(0,m.betNet))} a month after wins`,body:`You staked ${money(m.betOut)} a month across about ${Math.round(A.betN/A.months)} bets. Wins brought back ${money(m.betIn)}.`,acts:[['Start: No-bet week','start','no-bet'],['Read: The house edge','lesson','betting']]});
+  if(m.fees>=800)N.push({tone:'tip',w:60,title:`Bank fees and levies take ${money(m.fees)} a month`,body:`That's ${money(m.fees*12)} a year on alerts, transfer charges and levies. Part of it can be cut.`,acts:[['Start: Fee detox','start','fee-detox'],['Read: Small charges add up','lesson','fees']]});
+  if(A.subs.length>=2)N.push({tone:'tip',w:55,title:`${A.subs.length} subscriptions cost ${money(A.subsM)} a month`,body:A.subs.slice(0,4).map(s=>s.name).join(', ')+'. Keep the ones you use every week.',acts:[['Start: Subscription audit','start','sub-audit']]});
   if(A.untagged>=3)N.push({tone:'tip',w:50,title:`${A.untagged} transfers and payments need a tag`,body:'Tell your coach which transfers are family support, rent or loans to friends. Every insight gets sharper.',acts:[['Tag transactions','txns','untagged']]});
-  if(m.cash>=0.08*m.income)N.push({tone:'tip',w:45,title:`${naira(m.cash)} a month leaves as cash`,body:'Cash is a blind spot. Your coach can see it leave but not where it goes.',acts:[['Start: Cash diary','start','cash-diary']]});
+  if(m.cash>=0.08*m.income)N.push({tone:'tip',w:45,title:`${money(m.cash)} a month leaves as cash`,body:'Cash is a blind spot. Your coach can see it leave but not where it goes.',acts:[['Start: Cash diary','start','cash-diary']]});
   const ess=m.need+m.debt;
-  N.push({tone:'tip',w:30,title:`Your first emergency fund target: ${naira(ess*3)}`,body:`That's three months of essentials and loan repayments. Start with one week: ${naira(ess/4.35)}.`,acts:[['Start: Emergency fund starter','start','emergency'],['Read: Emergency fund 101','lesson','emergency']]});
+  N.push({tone:'tip',w:30,title:`Your first emergency fund target: ${money(ess*3)}`,body:`That's three months of essentials and loan repayments. Start with one week: ${money(ess/4.35)}.`,acts:[['Start: Emergency fund starter','start','emergency'],['Read: Emergency fund 101','lesson','emergency']]});
   if(A.keptRate>=0.15)N.push({tone:'good',w:95,title:`You kept ${pct(A.keptRate)} of your income`,body:'Protect it by moving it out of your spending account on payday, before it gets spent.',acts:[['Read: Prices rise, cash shrinks','lesson','inflation']]});
   return N.sort((a,b)=>b.w-a.w);
 }
@@ -721,13 +894,13 @@ function nudges(A){
 const CHAL={
   'payday-pause':{title:'Payday pause',kind:'daily',days:7,need:5,xp:120,blurb:()=>'For 7 days after your next pay lands, wait 24 hours before any lifestyle purchase.',tips:['Write down what you want and when','Buy it tomorrow only if you still want it']},
   'no-bet':{title:'No-bet week',kind:'daily',days:7,need:5,xp:150,cap:{cat:'Betting',mult:0},blurb:()=>'Seven days without placing a bet. Check in each day you stayed clear.',tips:['Log out of betting apps for the week','Mute match alerts']},
-  'cook-in':{title:'Cook-in week',kind:'daily',days:7,need:5,xp:100,cap:{cat:'Food & eating out',mult:0.5},blurb:A=>`Spend half your usual on food delivery and eating out this week: about ${naira(catWeekly(A,'Food & eating out')*0.5)}.`},
-  'weekend-cap':{title:'Weekend cap',kind:'daily',days:7,need:3,xp:100,blurb:A=>`Keep Friday to Sunday lifestyle spending under ${naira(A?A.m.want*(A.weekendShare||0.5)/4.35*0.7:10000)} this weekend. Check in on each weekend day you stay under.`},
+  'cook-in':{title:'Cook-in week',kind:'daily',days:7,need:5,xp:100,cap:{cat:'Food & eating out',mult:0.5},blurb:A=>`Spend half your usual on food delivery and eating out this week: about ${money(catWeekly(A,'Food & eating out')*0.5)}.`},
+  'weekend-cap':{title:'Weekend cap',kind:'daily',days:7,need:3,xp:100,blurb:A=>`Keep Friday to Sunday lifestyle spending under ${money(A?A.m.want*(A.weekendShare||0.5)/4.35*0.7:10000)} this weekend. Check in on each weekend day you stay under.`},
   'fee-detox':{title:'Fee detox',kind:'checklist',days:7,xp:80,blurb:()=>'Three quick checks that cut bank charges.',list:()=>['Check whether your bank lets you switch SMS alerts to app or email alerts','Group small transfers into fewer, larger ones where you can','Look up your card maintenance fees and whether you need every card']},
-  'sub-audit':{title:'Subscription audit',kind:'checklist',days:5,xp:80,blurb:()=>'Decide on each subscription: keep it only if you use it every week.',list:A=>(A&&A.subs.length?A.subs:[{name:'Streaming',m:0}]).slice(0,6).map(s=>`Keep or cancel ${s.name}${s.m?` (${naira(s.m)} a month)`:''}`)},
+  'sub-audit':{title:'Subscription audit',kind:'checklist',days:5,xp:80,blurb:()=>'Decide on each subscription: keep it only if you use it every week.',list:A=>(A&&A.subs.length?A.subs:[{name:'Streaming',m:0}]).slice(0,6).map(s=>`Keep or cancel ${s.name}${s.m?` (${money(s.m)} a month)`:''}`)},
   'cash-diary':{title:'Cash diary',kind:'daily',days:7,need:5,xp:90,blurb:()=>'Write down every cash spend for a week. Check in each day you logged them.'},
-  'pay-first':{title:'Pay yourself first',kind:'weekly',days:28,need:4,xp:160,blurb:A=>`On payday, move ${naira(A?A.m.income*0.1:20000)} (10% of pay) into a separate savings account before you spend. Check in each week you left it alone.`},
-  'emergency':{title:'Emergency fund starter',kind:'weekly',days:28,need:4,xp:200,blurb:A=>`Build one week of essentials: ${naira(A?(A.m.need+A.m.debt)/4.35:30000)}. Set aside a quarter of it each week.`},
+  'pay-first':{title:'Pay yourself first',kind:'weekly',days:28,need:4,xp:160,blurb:A=>`On payday, move ${money(A?A.m.income*0.1:20000)} (10% of pay) into a separate savings account before you spend. Check in each week you left it alone.`},
+  'emergency':{title:'Emergency fund starter',kind:'weekly',days:28,need:4,xp:200,blurb:A=>`Build one week of essentials: ${money(A?(A.m.need+A.m.debt)/4.35:30000)}. Set aside a quarter of it each week.`},
   'tag-5':{title:'Tag 5 transactions',kind:'tag',days:7,need:5,xp:60,blurb:()=>'Tag five transfers or payments so your coach knows what they were for.'}
 };
 function catWeekly(A,c){if(!A)return 0;const x=A.cats.find(k=>k.cat===c);return x?x.m*7/30.44:0;}
@@ -750,14 +923,14 @@ function recommended(A){
 }
 const LESSONS=[
   {id:'payday',title:'Why pay disappears in a week',min:2,body:['Right after payday your balance looks big, so every purchase feels small next to it. Bills, backlog from last month and requests from family all arrive in the same few days.','The fix is structure, not willpower. On the day pay lands, split it into three places: bills and essentials, spending money for the month, and savings. Then treat the spending pot as the whole budget.','A weekly allowance helps too. Move a quarter of your spending money each week into the account you actually spend from.'],q:{q:'What is the simplest guard against the payday rush?',o:['Split your pay into pots on the day it lands','Check your balance less often','Spend quickly before prices rise'],a:0,why:'Deciding where the money goes before you start spending removes the "big balance" feeling that drives the rush.'}},
-  {id:'fees',title:'Small charges add up',min:2,body:['Bank charges are small one at a time: SMS alert charges, transfer fees plus VAT, card maintenance fees, and a ₦50 levy on many incoming transfers of ₦10,000 or more.','Together they can reach thousands of naira a month. Some can be reduced: many banks let you switch SMS alerts to free app or email notifications, and grouping small transfers means fewer transfer charges.','Levies set by law cannot be avoided, but knowing them helps you read your statement without surprises.'],q:{q:'Which charge can you often reduce yourself?',o:['SMS alert charges, by switching to app or email alerts where offered','The levy on incoming transfers','Income tax'],a:0,why:'Alert charges depend on how you choose to be notified. Levies set by law apply regardless.'}},
+  {id:'fees',title:'Small charges add up',min:2,body:['Bank charges are small one at a time: SMS alert charges, transfer fees plus VAT, card maintenance fees, and in some countries small levies or stamp duties on transfers.','Together they can reach thousands of naira a month. Some can be reduced: many banks let you switch SMS alerts to free app or email notifications, and grouping small transfers means fewer transfer charges.','Levies set by law cannot be avoided, but knowing them helps you read your statement without surprises.'],q:{q:'Which charge can you often reduce yourself?',o:['SMS alert charges, by switching to app or email alerts where offered','The levy on incoming transfers','Income tax'],a:0,why:'Alert charges depend on how you choose to be notified. Levies set by law apply regardless.'}},
   {id:'emergency',title:'Your first emergency fund',min:2,body:['An emergency fund is money kept only for surprises: a medical bill, a lost job, a broken phone you need for work. It stops one bad week from becoming a loan.','A common target is three to six months of essentials. That can feel far away, so start with one week, then one month.','Keep it separate from your spending account, easy to reach in a day or two, and out of anything risky. Its job is to be there, not to grow fast.'],q:{q:'What should an emergency fund cover first?',o:['Essentials like rent, food, transport and power','Holidays and gadgets','Betting stakes'],a:0,why:'It exists to keep essentials paid when income stops or a shock hits.'}},
   {id:'inflation',title:'Prices rise, cash shrinks',min:2,body:['When prices rise 20% in a year, ₦100,000 buys only what about ₦83,000 bought the year before. Money sitting still loses buying power.','Interest helps only if it beats the rise in prices. Savings that earn 5% while prices rise 20% still lose ground.','Before putting money anywhere to grow it, learn how the option works, who regulates it and what you could lose. Ledger explains ideas; it does not recommend products.'],q:{q:'Prices rise 20% this year and your savings earn 5%. Your buying power…',o:['Falls','Rises','Stays the same'],a:0,why:'Your money grew 5% but what it buys fell by more, so you can buy less than before.'}},
   {id:'debt',title:'Loan apps: count the total cost',min:2,body:['Quick loans look cheap because the fee is shown for a short period. Borrow ₦20,000 and repay ₦26,000 after 30 days, and you have paid 30% for one month.','Borrow for real emergencies, not for lifestyle. If you have several loans, paying off the most expensive first saves the most money; paying off the smallest first gives quick wins. Both work if you stick with them.','If repayments take more than about a third of your income, talk to someone you trust or a qualified adviser before borrowing again.'],q:{q:'You borrow ₦20,000 and repay ₦26,000 after 30 days. The cost is…',o:['₦6,000, or 30% for one month','₦600','Nothing, it was only 30 days'],a:0,why:'The cost is the difference between what you repaid and what you borrowed.'}},
   {id:'split',title:'A simple split to start with',min:2,body:['One popular starting point: 50% of income on needs, 30% on wants and 20% on your future (savings and paying down debt).','Real life rarely fits exactly. With high rent, 60/25/15 might be honest. The point is that the future slice exists and gets paid first.','Look at your own "per ₦100" bar on Home and pick a split you can hit next month, then nudge it each month.'],q:{q:'What matters most about a spending split?',o:['That the future slice exists and is paid first','Hitting 50/30/20 exactly','Changing it every week'],a:0,why:'The exact numbers matter less than paying your future first, every month.'}},
   {id:'betting',title:'Betting and the house edge',min:2,body:['Betting odds are built so the bookmaker makes a profit over many bets. A win feels big, but your statement shows the full picture: total staked minus total won.','If you bet, set a monthly limit you can afford to lose and track the net, not the wins.','If stopping feels hard, or you chase losses, talk to someone you trust. That is a common experience, and support helps.'],q:{q:'Over many bets, who usually comes out ahead?',o:['The bookmaker','The bettor','It evens out'],a:0,why:'Odds include a margin for the bookmaker, so over time the house wins.'}}
 ];
-const BADGES=[['books','Opened the books','Upload your first statement','₦'],['self','Self-aware','Finish the money personality quiz','?'],['s3','3-day streak','Check in 3 days in a row','3'],['s7','Week strong','Check in 7 days in a row','7'],['s30','Month of habits','Check in 30 days in a row','30'],['c1','First challenge','Complete a challenge','1'],['c5','Challenge regular','Complete 5 challenges','5'],['ver','Verified','Have a challenge confirmed by your statement','✓'],['tag','Tagger','Tag 10 transactions','#'],['learn','Scholar','Finish 3 lessons','L'],['clean','Clean week','Complete No-bet week','0'],['s70','70 club','Reach a habit score of 70','70'],['kept','Keeper','Keep 20% of your income','20'],['coach','Curious','Ask your coach a question','Q']];
+const BADGES=[['books','Opened the books','Upload your first statement','¤'],['self','Self-aware','Finish the money personality quiz','?'],['s3','3-day streak','Check in 3 days in a row','3'],['s7','Week strong','Check in 7 days in a row','7'],['s30','Month of habits','Check in 30 days in a row','30'],['c1','First challenge','Complete a challenge','1'],['c5','Challenge regular','Complete 5 challenges','5'],['ver','Verified','Have a challenge confirmed by your statement','✓'],['tag','Tagger','Tag 10 transactions','#'],['learn','Scholar','Finish 3 lessons','L'],['clean','Clean week','Complete No-bet week','0'],['s70','70 club','Reach a habit score of 70','70'],['kept','Keeper','Keep 20% of your income','20'],['coach','Curious','Ask your coach a question','Q']];
 const LEVELS=[{n:1,name:'Aware',xp:0},{n:2,name:'Tracker',xp:100},{n:3,name:'Steady',xp:260},{n:4,name:'Builder',xp:500},{n:5,name:'Guardian',xp:850},{n:6,name:'Master',xp:1300}];
 const levelOf=xp=>LEVELS.reduce((L,l)=>xp>=l.xp?l:L,LEVELS[0]);
 function streak(){let n=0,d=todayISO();if(!S.checkins[d])d=addDays(d,-1);while(S.checkins[d]){n++;d=addDays(d,-1);}return n;}
@@ -788,22 +961,30 @@ function celebrate(title,msg,icon){
 }
 function setU(u){U=u;if(isWide()||tab==='statements'){const el=$('#uploadStatus');if(el){el.outerHTML=statusHTML();return;}}}
 const mq=matchMedia('(min-width: 980px)');const isWide=()=>mq.matches;
-function countUps(root){if(reduceMotion())return;root.querySelectorAll('[data-count]').forEach(el=>{const to=+el.dataset.count,fmt=el.dataset.fmt;const t0=performance.now();const f=v=>fmt==='n'?naira(v):Math.round(v);(function s(t){const k=Math.min(1,(t-t0)/900),e=1-Math.pow(1-k,3);el.textContent=f(to*e);if(k<1)requestAnimationFrame(s);})(t0);});}
+function countUps(root){if(reduceMotion())return;root.querySelectorAll('[data-count]').forEach(el=>{const to=+el.dataset.count,fmt=el.dataset.fmt;const t0=performance.now();const f=v=>fmt==='n'?money(v):Math.round(v);(function s(t){const k=Math.min(1,(t-t0)/900),e=1-Math.pow(1-k,3);el.textContent=f(to*e);if(k<1)requestAnimationFrame(s);})(t0);});}
 
 /* ================= render ================= */
+const LOGO_SRC=IN_VIEWER?'__LOGO_DATA__':'icons/logo.png';
+const LANGS=[['en','English'],['fr','Français'],['es','Español'],['pt','Português'],['sw','Kiswahili']];
+const I18N={fr:{'Home':'Accueil','Statements':'Relevés','Grow':'Progresser','Coach':'Coach','Me':'Moi','Before Ledger reads your statement':'Avant que Ledger lise votre relevé','Agree and continue':'Accepter et continuer','Download my data':'Télécharger mes données','Delete everything':'Tout supprimer','Language':'Langue','Close':'Fermer','Download as spreadsheet (CSV)':'Télécharger en tableur (CSV)'},
+es:{'Home':'Inicio','Statements':'Extractos','Grow':'Crecer','Coach':'Coach','Me':'Yo','Before Ledger reads your statement':'Antes de que Ledger lea tu extracto','Agree and continue':'Aceptar y continuar','Download my data':'Descargar mis datos','Delete everything':'Borrar todo','Language':'Idioma','Close':'Cerrar','Download as spreadsheet (CSV)':'Descargar como hoja de cálculo (CSV)'},
+pt:{'Home':'Início','Statements':'Extratos','Grow':'Evoluir','Coach':'Coach','Me':'Eu','Before Ledger reads your statement':'Antes de o Ledger ler o seu extrato','Agree and continue':'Aceitar e continuar','Download my data':'Baixar os meus dados','Delete everything':'Apagar tudo','Language':'Idioma','Close':'Fechar','Download as spreadsheet (CSV)':'Baixar como planilha (CSV)'},
+sw:{'Home':'Nyumbani','Statements':'Taarifa','Grow':'Kua','Coach':'Mkufunzi','Me':'Mimi','Before Ledger reads your statement':'Kabla Ledger haijasoma taarifa yako','Agree and continue':'Kubali na uendelee','Download my data':'Pakua data yangu','Delete everything':'Futa kila kitu','Language':'Lugha','Close':'Funga','Download as spreadsheet (CSV)':'Pakua kama lahajedwali (CSV)'}};
+function T(k){const l=(typeof S!=='undefined'&&S&&S.lang)||'en';return (I18N[l]&&I18N[l][k])||k;}
 const TABS=[['home','Home','home'],['statements','Statements','doc',1],['grow','Grow','grow'],['coach','Coach','chat'],['me','Me','me']];
 function render(){
+  setCur(activeCur());
   if(isWide()&&tab==='statements')tab='home';
   const lv=levelOf(S.xp),st=streak();
-  $('#topbar').innerHTML=`<div class="brand"><span class="mark" aria-hidden="true">₦</span><b>Ledger</b></div>
+  $('#topbar').innerHTML=`<div class="brand"><img class="brand-logo" src="${LOGO_SRC}" alt="Ledger" width="108" height="31"></div>
    <div class="pills"><button class="pill streak" data-act="tab" data-arg="me" aria-label="${st} day streak">${ic('flame')}<span class="num">${st}</span><span class="lbl">day streak</span></button>
    <button class="pill" data-act="tab" data-arg="me" aria-label="Level ${lv.n}, ${S.xp} XP">${ic('star')}<span>Lv ${lv.n}</span><span class="lbl num">· ${S.xp} XP</span></button>
    ${installEvt?`<button class="pill" data-act="install" aria-label="Install Ledger on this device">${ic('upload')}<span>Install app</span></button>`:''}
    <button class="pill safe" data-act="privacy" aria-label="Privacy: your data stays on this device">${ic('lock')}<span class="lbl">On this device</span></button></div>`;
-  $('#tabs').innerHTML=TABS.map(([id,l,icn,mob])=>`<button class="tab" data-act="tab" data-arg="${id}" ${mob?'data-mobile':''} ${tab===id?'aria-current="page"':''}>${ic(icn)}<span>${l}</span></button>`).join('');
+  $('#tabs').innerHTML=TABS.map(([id,l,icn,mob])=>`<button class="tab" data-act="tab" data-arg="${id}" ${mob?'data-mobile':''} ${tab===id?'aria-current="page"':''}>${ic(icn)}<span>${T(l)}</span></button>`).join('');
   $('#side').innerHTML=isWide()?`<div class="card">${statementsPanel()}</div>`:'';
   const v=$('#view');
-  v.innerHTML=tab==='home'?viewHome():tab==='statements'?`<div class="card">${statementsPanel()}</div>`:tab==='grow'?viewGrow():tab==='coach'?viewCoach():viewMe();
+  v.innerHTML=`<h1 class="sr">Ledger, ${tab==='home'?'Home':tab==='statements'?'Statements':tab==='grow'?'Grow':tab==='coach'?'Coach':'Me'}</h1>`+(tab==='home'?viewHome():tab==='statements'?`<div class="card">${statementsPanel()}</div>`:tab==='grow'?viewGrow():tab==='coach'?viewCoach():viewMe());
   if(revealNext&&tab==='home'){revealNext=false;const st=$('#story');if(st){st.classList.add('reveal');countUps(st);setTimeout(()=>st.classList.remove('reveal'),1600);}}
   const chatEl=$('#chat');if(chatEl)chatEl.scrollTop=chatEl.scrollHeight;
 }
@@ -819,15 +1000,18 @@ function statusHTML(){
 function statementsPanel(){
   const A=getA();const T=getTxns();
   const list=S.demo?`<div class="stmt"><div><div class="nm">Sample statement (Tolu, fictional)</div><div class="tiny">${A?`${fmtD(A.from)} – ${fmtDY(A.to)} · ${T.length} transactions`:''}</div></div><button class="btn q sm" data-act="clear-demo">Remove</button></div>`
-    :S.statements.map(s=>`<div class="stmt"><div><div class="nm">${esc(s.name)}</div><div class="tiny">${s.from?fmtD(s.from)+' – '+fmtDY(s.to)+' · ':''}${s.count} transactions</div></div><button class="btn q sm" data-act="rm-stmt" data-arg="${s.id}" aria-label="Remove ${esc(s.name)}">Remove</button></div>`).join('');
+    :S.statements.map(s=>`<div class="stmt"><div><div class="nm">${esc(s.name)}</div><div class="tiny">${s.from?fmtD(s.from)+' – '+fmtDY(s.to)+' · ':''}${s.count} transactions · ${esc(s.cur||'NGN')}</div>${s.kind==='manual'?'':`<label class="tiny">Currency <select aria-label="Currency of ${esc(s.name)}" data-change="stmt-cur" data-arg="${s.id}">${curOptions(s.cur||'NGN')}</select></label>`}</div><button class="btn q sm" data-act="rm-stmt" data-arg="${s.id}" aria-label="Remove ${esc(s.name)}">Remove</button></div>`).join('');
+  const curs=[...new Set(S.txns.map(t=>t.cur||'NGN'))];
+  const chips=!S.demo&&curs.length>1?`<div><h3 style="margin-bottom:4px">Show amounts in</h3><div class="row" role="group" aria-label="Currency to show">${curs.map(c=>`<button class="btn ${c===S.cur?'':'q'} sm" data-act="set-cur" data-arg="${c}" aria-pressed="${c===S.cur}">${c} ${curSym(c)}</button>`).join('')}</div><p class="tiny">Ledger never converts between currencies. Each currency is analysed on its own.</p></div>`:'';
   return`<div class="panel">
    <div><h2>Statements</h2><p class="muted small" style="margin-top:4px">Upload the statement you already get from your bank. No bank login and no account linking.</p></div>
-   <div class="drop" data-act="pick" role="button" tabindex="0" aria-label="Upload a bank statement">${ic('upload')}<strong>Drop a statement here</strong><span class="muted small">or tap to choose a file</span><span class="tiny">PDF, Excel or CSV from any Nigerian bank</span></div>
+   <div class="drop" data-act="pick" role="button" tabindex="0" aria-label="Upload a bank statement">${ic('upload')}<strong>Drop a statement here</strong><span class="muted small">or tap to choose a file</span><span class="tiny">PDF, Excel, CSV, OFX or QIF from banks in Africa, Europe, the US and beyond</span></div>
    ${statusHTML()}
    ${planLine()}
    <div class="lockline">${ic('lock')}<span>Read on this device. The file is never uploaded or stored, only the transactions it contains.</span></div>
    <div class="row"><button class="btn q sm" data-act="paste">${pasteOpen?'Hide paste box':'Paste text instead'}</button><button class="btn q sm" data-act="manual">Enter numbers by hand</button></div>
    ${pasteOpen?`<div class="stack" style="gap:8px"><label class="f" for="pasteBox">Paste rows from your statement<textarea id="pasteBox" data-input="paste" placeholder="01/09/2026  POS PURCHASE SHOPRITE  18,500.00  142,300.00">${esc(pasteDraft)}</textarea></label><button class="btn sm" data-act="paste-go">Read pasted rows</button></div>`:''}
+   ${chips}
    ${list?`<div><h3 style="margin-bottom:4px">On this device</h3>${list}</div>`:''}
    ${T.length?`<button class="btn q" data-act="txns" data-arg="${A&&A.untagged?'untagged':'all'}">Review transactions${A&&A.untagged?` · ${A.untagged} need a tag`:''}</button>`:''}
    <details><summary>Where do I get my statement?</summary><p class="small muted">In most bank apps, look for "Account statement" under Accounts, Cards or Help. Choose the last 3 months as PDF or Excel. Many banks also email statements on request.</p></details>
@@ -837,7 +1021,7 @@ function statementsPanel(){
 /* ---------- home ---------- */
 function viewHome(){
   const A=getA();let h=planBanner();
-  if(S.demo)h+=`<div class="banner"><p><b>You're looking at a sample.</b> Tolu is a fictional Lagos professional. Upload your own statement to see your real money story.</p><div class="row"><button class="btn sm" data-act="pick">${ic('upload')}Upload my statement</button></div></div>`;
+  if(S.demo)h+=`<div class="banner"><p><b>You're looking at a sample.</b> Tolu is a fictional professional (shown in naira). Upload your own statement to see your real money story.</p><div class="row"><button class="btn sm" data-act="pick">${ic('upload')}Upload my statement</button></div></div>`;
   h+=checkinCard();
   if(!A)return h+emptyHero();
   h+=`<div id="story" class="stack">${storyHero(A)}${coachFeed(A)}<div class="grid2">${whereCard(A)}${cycleCard(A)}</div>${insightTiles(A)}<div class="grid2">${merchantsCard(A)}${trendCard(A)}</div></div>`;
@@ -874,10 +1058,10 @@ function storyHero(A){
      ${A.traits.length?`<ul class="evidence">${A.traits.slice(0,3).map(t=>`<li>${esc(t.ev)}</li>`).join('')}</ul>`:''}
      ${A.traits.length>1?`<div class="traits">${A.traits.slice(1,5).map(t=>`<span class="chip">${esc(ARCH[t.id].chip)}</span>`).join('')}</div>`:''}
     </div></div>
-   <div class="stats3"><div class="stat"><b data-count="${Math.round(A.m.income)}" data-fmt="n">${naira(A.m.income)}</b><span>in per month</span></div><div class="stat"><b data-count="${Math.round(A.m.spend)}" data-fmt="n">${naira(A.m.spend)}</b><span>out per month</span></div><div class="stat"><b style="color:${A.keptRate<0?'var(--coral)':'var(--green)'}">${A.keptRate<0?'-':''}${pct(Math.abs(A.keptRate))}</b><span>${A.keptRate<0?'overspent':'kept'}</span></div></div>
-   <div class="per100"><h3>Of every ₦100 ${S.demo?'Tolu earns':'you earn'}</h3>
-    <div class="split" role="img" aria-label="${segs.map(s=>`${s.label} ₦${Math.round(s.v)}`).join(', ')}">${segs.map(s=>`<i style="width:${s.v/scale*100}%;background:${s.c}"></i>`).join('')}</div>
-    <div class="legend">${segs.map(s=>`<span><i style="background:${s.c}"></i>${s.label} <b class="num">₦${Math.round(s.v)}</b></span>`).join('')}${over?`<span style="color:var(--coral)"><b>₦${Math.round(-A.keptPer100)} more than earned</b></span>`:''}</div></div>
+   <div class="stats3"><div class="stat"><b data-count="${Math.round(A.m.income)}" data-fmt="n">${money(A.m.income)}</b><span>in per month</span></div><div class="stat"><b data-count="${Math.round(A.m.spend)}" data-fmt="n">${money(A.m.spend)}</b><span>out per month</span></div><div class="stat"><b style="color:${A.keptRate<0?'var(--coral)':'var(--green)'}">${A.keptRate<0?'-':''}${pct(Math.abs(A.keptRate))}</b><span>${A.keptRate<0?'overspent':'kept'}</span></div></div>
+   <div class="per100"><h3>Of every ${curSym()}100 ${S.demo?'Tolu earns':'you earn'}</h3>
+    <div class="split" role="img" aria-label="${segs.map(s=>`${s.label} ${curSym()}${Math.round(s.v)}`).join(', ')}">${segs.map(s=>`<i style="width:${s.v/scale*100}%;background:${s.c}"></i>`).join('')}</div>
+    <div class="legend">${segs.map(s=>`<span><i style="background:${s.c}"></i>${s.label} <b class="num">${curSym()}${Math.round(s.v)}</b></span>`).join('')}${over?`<span style="color:var(--coral)"><b>${curSym()}${Math.round(-A.keptPer100)} more than earned</b></span>`:''}</div></div>
    ${quizGap?`<p class="gap">${esc(quizGap)}</p>`:''}
   </section>`;
 }
@@ -900,7 +1084,7 @@ function groupOf(c){if(c.cat==='Betting'||c.cat==='Subscriptions'||c.type==='fee
 function whereCard(A){
   const top=A.cats.slice(0,9),max=Math.max(...top.map(c=>c.m),1);
   return`<section class="card"><div class="head"><div><h2>Where it goes</h2><p class="muted small">Average per month</p></div></div>
-  <div class="bars">${top.map(c=>`<div class="bar-row"><span>${esc(c.cat)}<small>${pct(c.m/Math.max(1,A.m.income))} of income</small></span><b>${naira(c.m)}</b><div class="track"><i style="width:${c.m/max*100}%;background:${GCOL[groupOf(c)]}"></i></div></div>`).join('')}</div>
+  <div class="bars">${top.map(c=>`<div class="bar-row"><span>${esc(c.cat)}<small>${pct(c.m/Math.max(1,A.m.income))} of income</small></span><b>${money(c.m)}</b><div class="track"><i style="width:${c.m/max*100}%;background:${GCOL[groupOf(c)]}"></i></div></div>`).join('')}</div>
   <div class="legend" style="margin-top:14px">${[['need','Essentials'],['want','Lifestyle'],['leak','Leaks'],['other','Transfers, cash & loans']].map(([k,l])=>`<span><i style="background:${GCOL[k]}"></i>${l}</span>`).join('')}</div></section>`;
 }
 function cycleCard(A){
@@ -910,23 +1094,23 @@ function cycleCard(A){
   <p><span class="big">${pct(A.front)}</span> <span class="muted">in the first 7 days</span></p>
   <div class="cyc" role="img" aria-label="${pct(A.front)} of lifestyle spending happens in the first 7 days after payday">${A.cycleBars.map((b,i)=>`<i class="${i<7?'f':''}" style="height:${Math.max(3,b/max*100)}%"></i>`).join('')}</div>
   <div class="axis"><span>Payday</span><span>Day 7</span><span>Day 30</span></div>
-  <p class="small muted" style="margin-top:10px">All spending in those 7 days averages ${naira(A.spent7)}, including rent and transfers.</p></section>`;
+  <p class="small muted" style="margin-top:10px">All spending in those 7 days averages ${money(A.spent7)}, including rent and transfers.</p></section>`;
 }
 function insightTiles(A){
   const m=A.m,T=[];
   if(A.weekendShare!=null)T.push(['Weekend share',pct(A.weekendShare),'of lifestyle spending on Friday to Sunday. Three days out of seven is 43%.',A.weekendShare>0.58?'warn':'good',A.weekendShare>0.58?'High':'Even']);
-  T.push(['Small spends',naira(m.tiny),`a month across about ${Math.round(A.tinyN/A.months)} purchases under ₦2,000.`,m.tiny>0.05*m.income?'warn':'good',m.tiny>0.05*m.income?'Adds up':'Fine']);
-  if(m.fees>0)T.push(['Bank fees & levies',naira(m.fees),`a month. Alerts ${naira(A.feeParts.sms/A.months)}, transfer charges ${naira(A.feeParts.transfer/A.months)}, levies ${naira(A.feeParts.levy/A.months)}.`,m.fees>1500?'bad':'warn','Leak']);
-  if(m.betOut>0)T.push(['Betting, net',naira(Math.max(0,m.betNet)),`a month lost after wins. Staked ${naira(m.betOut)}, won back ${naira(m.betIn)}.`,'bad','Leak']);
-  if(A.subs.length)T.push(['Subscriptions',naira(A.subsM),`a month: ${A.subs.slice(0,3).map(s=>s.name).join(', ')}.`,'warn','Review']);
-  if(m.transfer+m.giving>0)T.push(['To other people',naira(m.transfer+m.giving),`a month in transfers and giving.${A.untagged?` ${A.untagged} still need a tag.`:''}`,'info','Tag']);
-  if(m.cash>0)T.push(['Cash withdrawals',naira(m.cash),"a month. Your coach can't see where cash goes.",m.cash>0.1*m.income?'warn':'info','Blind spot']);
-  if(m.saving>0)T.push(['Moved to savings',naira(m.saving),'a month, net of withdrawals.','good','Good']);
-  if(A.biggest)T.push(['Biggest single spend',naira(A.biggest.a),`${A.biggest.t.cat} on ${fmtD(A.biggest.t.date)}.`,'info','Info']);
+  T.push(['Small spends',money(m.tiny),`a month across about ${Math.round(A.tinyN/A.months)} purchases under ${money(localScale(2000))}.`,m.tiny>0.05*m.income?'warn':'good',m.tiny>0.05*m.income?'Adds up':'Fine']);
+  if(m.fees>0)T.push(['Bank fees & levies',money(m.fees),`a month. Alerts ${money(A.feeParts.sms/A.months)}, transfer charges ${money(A.feeParts.transfer/A.months)}, levies ${money(A.feeParts.levy/A.months)}.`,m.fees>1500?'bad':'warn','Leak']);
+  if(m.betOut>0)T.push(['Betting, net',money(Math.max(0,m.betNet)),`a month lost after wins. Staked ${money(m.betOut)}, won back ${money(m.betIn)}.`,'bad','Leak']);
+  if(A.subs.length)T.push(['Subscriptions',money(A.subsM),`a month: ${A.subs.slice(0,3).map(s=>s.name).join(', ')}.`,'warn','Review']);
+  if(m.transfer+m.giving>0)T.push(['To other people',money(m.transfer+m.giving),`a month in transfers and giving.${A.untagged?` ${A.untagged} still need a tag.`:''}`,'info','Tag']);
+  if(m.cash>0)T.push(['Cash withdrawals',money(m.cash),"a month. Your coach can't see where cash goes.",m.cash>0.1*m.income?'warn':'info','Blind spot']);
+  if(m.saving>0)T.push(['Moved to savings',money(m.saving),'a month, net of withdrawals.','good','Good']);
+  if(A.biggest)T.push(['Biggest single spend',money(A.biggest.a),`${A.biggest.t.cat} on ${fmtD(A.biggest.t.date)}.`,'info','Info']);
   return`<section aria-label="Behaviour insights"><h2 style="margin:4px 0 12px">Your patterns</h2><div class="tiles">${T.map(([l,v,p,tone,chip])=>`<div class="tile"><div class="top"><span class="lab">${l}</span><span class="chip ${tone}">${chip}</span></div><b>${v}</b><p>${esc(p)}</p></div>`).join('')}</div></section>`;
 }
 function merchantsCard(A){
-  return`<section class="card"><div class="head"><div><h2>Where you spend most</h2><p class="muted small">Top places, per month</p></div></div><div class="list">${A.merchants.map(x=>`<div class="li"><div><div class="nm">${esc(x.name)}</div><div class="sub">${esc(x.cat)} · ${timesM(x.n/A.months)}</div></div><div class="v">${naira(x.m)}</div></div>`).join('')||'<p class="muted small">Nothing to show yet.</p>'}</div></section>`;
+  return`<section class="card"><div class="head"><div><h2>Where you spend most</h2><p class="muted small">Top places, per month</p></div></div><div class="list">${A.merchants.map(x=>`<div class="li"><div><div class="nm">${esc(x.name)}</div><div class="sub">${esc(x.cat)} · ${timesM(x.n/A.months)}</div></div><div class="v">${money(x.m)}</div></div>`).join('')||'<p class="muted small">Nothing to show yet.</p>'}</div></section>`;
 }
 const timesM=v=>{const n=Math.max(1,Math.round(v));return n===1?'about once a month':n===2?'twice a month':n+' times a month';};
 function trendCard(A){
@@ -935,7 +1119,7 @@ function trendCard(A){
   const W=420,Hh=220,pl=52,pb=26,pt=12,max=Math.max(...M.flatMap(x=>[x.in,x.out]),1);
   const step=Math.pow(10,Math.floor(Math.log10(max/2)));const nice=[1,2,2.5,5,10].map(k=>k*step).find(v=>v*2>=max/1.05)||step*10;const top=nice*2;
   const y=v=>pt+(Hh-pt-pb)*(1-v/top);const gw=(W-pl-10)/M.length,bw=Math.min(34,gw/3);
-  let g='';[0,nice,top].forEach(v=>{g+=`<line x1="${pl}" x2="${W-6}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)" stroke-width="1"/><text x="${pl-8}" y="${y(v)+4}" text-anchor="end" font-size="12" fill="var(--ink-3)">${nairaK(v)}</text>`;});
+  let g='';[0,nice,top].forEach(v=>{g+=`<line x1="${pl}" x2="${W-6}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)" stroke-width="1"/><text x="${pl-8}" y="${y(v)+4}" text-anchor="end" font-size="12" fill="var(--ink-3)">${moneyK(v)}</text>`;});
   M.forEach((mo,i)=>{const cx=pl+gw*i+gw/2;const lab=MON_SHORT[+mo.k.slice(5)-1]+(mo.partial?'*':'');
     g+=`<rect x="${cx-bw-2}" y="${y(mo.in)}" width="${bw}" height="${Hh-pb-y(mo.in)}" rx="4" fill="var(--green)"/><rect x="${cx+2}" y="${y(mo.out)}" width="${bw}" height="${Hh-pb-y(mo.out)}" rx="4" fill="var(--gold)"/><text x="${cx}" y="${Hh-8}" text-anchor="middle" font-size="12" fill="var(--ink-2)">${lab}</text>`;});
   return`<section class="card"><div class="head"><div><h2>Month by month</h2><p class="muted small">Money in and out</p></div><div class="legend" style="margin:0"><span><i style="background:var(--green)"></i>In</span><span><i style="background:var(--gold)"></i>Out</span></div></div>
@@ -960,7 +1144,7 @@ function chalCard(c,A){
     const n=Math.min(d.need,S.tags-c.tag0);
     body=`<div class="progress" aria-label="${n} of ${d.need} tagged"><i style="width:${n/d.need*100}%"></i></div><div class="row"><button class="btn sm" data-act="txns" data-arg="untagged">Tag transactions</button><span class="tiny">${n} of ${d.need} tagged</span></div>`;
   }
-  const ver=c.result?`<p class="verify">Statement check: ${c.result.pass?'✓ ':''}you spent ${naira(c.result.spent)} on ${esc(d.cap.cat.toLowerCase())} during the challenge (target ${naira(c.result.target)}).</p>`:(d.cap?'<p class="tiny">Upload a statement covering these dates later and Ledger will verify it for +50 XP.</p>':'');
+  const ver=c.result?`<p class="verify">Statement check: ${c.result.pass?'✓ ':''}you spent ${money(c.result.spent)} on ${esc(d.cap.cat.toLowerCase())} during the challenge (target ${money(c.result.target)}).</p>`:(d.cap?'<p class="tiny">Upload a statement covering these dates later and Ledger will verify it for +50 XP.</p>':'');
   return`<article class="card ch"><div class="row top"><div><h3>${esc(d.title)}</h3><p class="tiny">Started ${fmtD(c.start)} · ${d.xp} XP on completion</p></div><button class="btn link" data-act="ch-drop" data-arg="${c.id}">Drop</button></div><p class="small muted">${esc(d.blurb(A))}</p>${d.tips?`<p class="tiny">Tip: ${esc(d.tips.join('. '))}.</p>`:''}${body}${ver}</article>`;
 }
 function viewGrow(){
@@ -987,33 +1171,36 @@ function viewCoach(){
   if(!S.consent.ai)return h+`<div class="notice stack" style="gap:10px"><b>Turn on the AI coach</b><p class="small">Your coach uses Claude, an AI model by Anthropic, to answer. When you ask a question, Ledger sends a short summary of your numbers${IN_VIEWER?'':' through Ledger\'s coach service'}: monthly totals, categories and patterns. It never sends your transactions, the file or the names of people you pay, and Ledger does not keep your questions. You can turn this off in Me.</p><div class="row"><button class="btn" data-act="ai-on">Turn on AI coach</button></div></div></section>`;
   if(sampleState==='none')h+='<p class="notice">The AI coach isn\'t available in this view. Your coach feed on Home still updates from your statement.</p>';
   else if(sampleState==='pending')h+='<p class="tiny">Connecting to your coach…</p>';
-  h+=`<div class="chat" id="chat" aria-live="polite">${chat.length?'':`<div class="msg a">Hi${S.demo?'':''}. I've looked at ${S.demo?"Tolu's sample statement":'your statement'}: ${naira(A.m.income)} in and ${naira(A.m.spend)} out a month. Ask me anything about it.</div>`}${chat.map(x=>`<div class="msg ${x.role==='user'?'u':'a'}${x.err?' err':''}">${esc(x.content)}</div>`).join('')}${chatBusy?`<div class="msg a" id="live">${liveText?esc(liveText):'Thinking…'}</div>`:''}</div>`;
+  h+=`<div class="chat" id="chat" aria-live="polite">${chat.length?'':`<div class="msg a">Hi${S.demo?'':''}. I've looked at ${S.demo?"Tolu's sample statement":'your statement'}: ${money(A.m.income)} in and ${money(A.m.spend)} out a month. Ask me anything about it.</div>`}${chat.map(x=>`<div class="msg ${x.role==='user'?'u':'a'}${x.err?' err':''}">${esc(x.content)}</div>`).join('')}${chatBusy?`<div class="msg a" id="live">${liveText?esc(liveText):'Thinking…'}</div>`:''}</div>`;
   if(!chat.length&&sampleState!=='none')h+=`<div class="suggest">${SUGGEST.map(s=>`<button data-act="ask" data-arg="${esc(s)}">${esc(s)}</button>`).join('')}</div>`;
   if(sampleState!=='none')h+=`<form class="composer" data-form="chat"><label class="sr" for="chatIn">Message your coach</label><textarea id="chatIn" data-input="chat" placeholder="Ask about your money…" rows="1">${esc(chatDraft)}</textarea>${chatBusy?'<button class="btn q" type="button" data-act="stop">Stop</button>':'<button class="btn" type="submit">Send</button>'}</form>`;
   return h+'</section>';
 }
+const curOptions=sel=>CURRENCIES.map(c=>`<option value="${c[0]}" ${c[0]===sel?'selected':''}>${c[0]} · ${esc(c[1])}</option>`).join('');
+const coachUnit=()=>Math.max(1,CUR==='NGN'?100:niceRound(100/(SCALE_NGN[CUR]||1)));
 function coachContext(A){
-  const m=A.m,r=v=>Math.round(v/100)*100;
+  const m=A.m,u=Math.max(1,CUR==='NGN'?100:niceRound(100/(SCALE_NGN[CUR]||1))),r=v=>Math.round(v/u)*u;
   return[
+    `All amounts are in ${curName()} (${CUR}, symbol ${curSym()}).`,
     `Data source: ${S.demo?'a SAMPLE statement for a fictional person named Tolu (make clear this is sample data if relevant)':"the user's own uploaded bank statement"}, ${fmtDY(A.from)} to ${fmtDY(A.to)}.`,
-    `Monthly income ₦${r(m.income)}; monthly spending (net) ₦${r(m.spend)}; kept ₦${r(m.kept)} (${pct(A.keptRate)}).`,
-    `Of every ₦100 earned: ${A.per100.map(p=>`${p.label} ₦${Math.round(p.v)}`).join(', ')}, kept ₦${Math.round(A.keptPer100)}.`,
-    `Top categories per month: ${A.cats.slice(0,9).map(c=>`${c.cat} ₦${r(c.m)}`).join('; ')}.`,
-    `Moved to savings per month: ₦${r(m.saving)}. Loan repayments per month: ₦${r(m.debt)}.`,
+    `Monthly income ${curSym()}${r(m.income)}; monthly spending (net) ${curSym()}${r(m.spend)}; kept ${curSym()}${r(m.kept)} (${pct(A.keptRate)}).`,
+    `Of every ${curSym()}100 earned: ${A.per100.map(p=>`${p.label} ${curSym()}${Math.round(p.v)}`).join(', ')}, kept ${curSym()}${Math.round(A.keptPer100)}.`,
+    `Top categories per month: ${A.cats.slice(0,9).map(c=>`${c.cat} ${curSym()}${r(c.m)}`).join('; ')}.`,
+    `Moved to savings per month: ${curSym()}${r(m.saving)}. Loan repayments per month: ${curSym()}${r(m.debt)}.`,
     A.front!=null?`Share of lifestyle spending in the first 7 days after payday: ${pct(A.front)}.`:'Payday timing unknown.',
     A.weekendShare!=null?`Weekend (Fri-Sun) share of lifestyle spending: ${pct(A.weekendShare)}.`:'',
-    `Bank fees and levies per month: ₦${r(m.fees)}. Subscriptions per month: ₦${r(A.subsM)} (${A.subs.map(s=>s.name).join(', ')||'none'}).`,
-    m.betOut>0?`Betting per month: staked ₦${r(m.betOut)}, won back ₦${r(m.betIn)}, net loss ₦${r(Math.max(0,m.betNet))}.`:'No betting.',
-    `Cash withdrawals per month ₦${r(m.cash)}; transfers to people and giving ₦${r(m.transfer+m.giving)}.`,
+    `Bank fees and levies per month: ${curSym()}${r(m.fees)}. Subscriptions per month: ${curSym()}${r(A.subsM)} (${A.subs.map(s=>s.name).join(', ')||'none'}).`,
+    m.betOut>0?`Betting per month: staked ${curSym()}${r(m.betOut)}, won back ${curSym()}${r(m.betIn)}, net loss ${curSym()}${r(Math.max(0,m.betNet))}.`:'No betting.',
+    `Cash withdrawals per month ${curSym()}${r(m.cash)}; transfers to people and giving ${curSym()}${r(m.transfer+m.giving)}.`,
     `Habit score ${A.score.total}/100 (Ledger's own habits measure, not a credit score). Archetype: ${A.arch.name}. Traits: ${A.traits.map(t=>ARCH[t.id].chip).join(', ')||'none'}.`,
     S.quiz?`User's stated goal: ${GOALS[S.quiz.goal]||'not given'}.`:'',
     S.challenges.active.length?`Active challenges: ${S.challenges.active.map(c=>CHAL[c.id]?.title).join(', ')}.`:''
   ].filter(Boolean).join('\n');
 }
 function coachRules(A){
-  return`You are the coach inside Ledger, a money-habits app for people in Nigeria. You teach and encourage. You are not a licensed financial adviser.
+  return`You are the coach inside Ledger, a money-habits app for people around the world. You teach and encourage. You are not a licensed financial adviser.
 Rules:
-- Base every answer on the numbers below. Use ₦ and round to the nearest ₦100.
+- Base every answer on the numbers below. Use the currency the numbers are in (${curName()}, ${curSym()}) and round to the nearest ${curSym()}${coachUnit()}. Do not convert to another currency.
 - Keep answers under 140 words. Warm, plain and direct. End with one concrete next step the user can do this week.
 - Education only. Never recommend a specific bank, fintech app, loan app, fund, stock, crypto asset or investment product, and never tell the user to buy, sell or invest in any specific asset. You may explain general ideas (budgeting, emergency funds, inflation, interest, fees, debt payoff methods) and suggest they compare regulated options themselves.
 - Never promise returns or outcomes.
@@ -1079,10 +1266,10 @@ function viewMe(){
   <section class="card" id="privacy"><div class="head"><div><h2>Privacy & data</h2><p class="muted small">Ledger never connects to your bank. Statements are read on this device and the files are never uploaded.</p></div></div>
    <label class="toggle" for="tg-store"><div><b>Remember my data on this device</b><span>Keeps your transactions between visits. Off means everything clears when you close the page.</span></div><span class="switch"><input type="checkbox" id="tg-store" data-change="tg-store" ${c.store?'checked':''}><i></i></span></label>
    <label class="toggle" for="tg-ai"><div><b>AI coach</b><span>Sends a summary of your numbers to Claude when you ask a question. Never transactions, files or names.</span></div><span class="switch"><input type="checkbox" id="tg-ai" data-change="tg-ai" ${c.ai?'checked':''}><i></i></span></label>
-   <div class="row" style="margin-top:14px"><button class="btn q sm" data-act="export">Download my data</button><button class="btn q sm" data-act="wipe-ask">Delete everything</button></div>
+   <div class="row" style="margin-top:14px"><button class="btn q sm" data-act="export">${T('Download my data')}</button><button class="btn q sm" data-act="export-csv">${T('Download as spreadsheet (CSV)')}</button><button class="btn q sm" data-act="wipe-ask">${T('Delete everything')}</button></div><div class="row" style="margin-top:14px;align-items:center"><span class="small"><b>${T('Language')}</b></span>${LANGS.map(([c,n])=>`<button class="btn ${(S.lang||'en')===c?'':'q'} sm" data-act="set-lang" data-arg="${c}" aria-pressed="${(S.lang||'en')===c}">${n}</button>`).join('')}</div>
    <div id="wipeBox"></div>
    <p class="tiny" style="margin-top:12px">Ledger gives financial education based on your own data. It is not licensed investment, tax or legal advice.</p>
-   ${!IN_VIEWER?`<p class="small" style="margin-top:10px"><a href="privacy.html">Privacy policy</a> · <a href="terms.html">Terms of use</a></p>`:''}
+   ${!IN_VIEWER?`<p class="small legal-links" style="margin-top:4px"><a href="privacy.html">Privacy policy</a> · <a href="terms.html">Terms of use</a></p>`:''}
    ${CONTACT_EMAIL?`<p class="small muted" style="margin-top:6px">Questions or feedback: <span style="user-select:all">${esc(CONTACT_EMAIL)}</span></p>`:''}</section>
   ${!IN_VIEWER&&/iphone|ipad|ipod/i.test(navigator.userAgent)&&!navigator.standalone?'<section class="card"><h2>Put Ledger on your home screen</h2><p class="muted small" style="margin-top:6px">In Safari, tap the Share button, then "Add to Home Screen". Ledger then opens like an app and works offline.</p></section>':''}
   </div>`;
@@ -1136,12 +1323,13 @@ function expireChallenges(){
   S.challenges.active=S.challenges.active.filter(c=>{const d=CHAL[c.id];if(!d)return false;if(daysBetween(c.start,t)>=d.days+3&&(d.kind==='daily'||d.kind==='weekly')){S.challenges.ended.push({id:c.id,start:c.start});return false;}return true;});
 }
 function openConsent(then){
-  openSheet(`<button class="btn q sm x" data-act="close" aria-label="Close">${ic('x')}</button><h2>Before Ledger reads your statement</h2>
+  openSheet(`<button class="btn q sm x" data-act="close" aria-label="Close">${ic('x')}</button><h2>${T('Before Ledger reads your statement')}</h2>
    <p class="muted small">Ledger doesn't connect to your bank. You choose a statement you already have, and it is read here on this device.</p>
    <div><label class="toggle" for="cs-read"><div><b>Read my statement on this device</b><span>Needed to find your income, spending and patterns. The file itself is never uploaded or stored.</span></div><span class="switch"><input type="checkbox" id="cs-read" checked disabled><i></i></span></label>
    <label class="toggle" for="cs-store"><div><b>Remember my data on this device</b><span>Keeps your transactions for next time. Leave off to clear everything when you close the page.</span></div><span class="switch"><input type="checkbox" id="cs-store" checked><i></i></span></label></div>
+   <p class="tiny">Wherever you live, you can access, download and delete your data at any time in Me (your rights under laws such as the GDPR, UK GDPR, CCPA and POPIA). Ledger doesn't sell your data.</p>
    <p class="tiny">Ledger gives financial education based on your own data. It is not licensed investment, tax or legal advice. You can download or delete your data at any time in Me.</p>
-   <button class="btn" data-act="consent-go">Agree and continue</button>`);
+   <button class="btn" data-act="consent-go">${T('Agree and continue')}</button>`);
   consentThen=then;
 }
 let consentThen=null;
@@ -1153,7 +1341,11 @@ async function ingestFile(f,password){
     const buf=await f.arrayBuffer();let rows,kind;
     if(ext==='pdf'||f.type==='application/pdf'){rows=await pdfToRows(buf,password);kind='pdf';}
     else if(ext==='xlsx'||ext==='xls'){rows=await xlsxToRows(buf);kind='xlsx';}
-    else{rows=textToRows(new TextDecoder().decode(buf));kind='text';}
+    else{
+      const text=decodeText(buf);const st=parseStructured(text,S.cur||localeCurrency());
+      if(st){finishIngest(null,'file',f.name,st);return;}
+      rows=textToRows(text);kind='text';
+    }
     finishIngest(rows,kind,f.name);
   }catch(err){
     if(err&&err.name==='PasswordException'){pendingFile=f;setU({needPassword:true,wrong:err.code===2});const p=$('#pwIn');if(p)p.focus();return;}
@@ -1161,23 +1353,24 @@ async function ingestFile(f,password){
     setU({error:"Ledger couldn't read this file. Try the Excel or CSV export from your bank, or paste the rows as text."});
   }
 }
-function finishIngest(rows,kind,name){
+function finishIngest(rows,kind,name,pre){
   if(!isWide()&&tab!=='statements'){tab='statements';render();}
   if(!canUpload()){setU({});openPlan('limit');return;}
-  const {txns}=parseStatement(rows,kind);
+  const {txns,cur:scur}=pre||parseStatement(rows,kind,S.demo?(localeCurrency()||'NGN'):(S.cur||localeCurrency()));
   if(txns.length<3){setU({error:kind==='pdf'&&rows.length<8?'This PDF has no readable text. It may be a scanned image. Download the digital statement from your bank app, or use the Excel or CSV export.':'Ledger found fewer than 3 transactions. Check that this is a bank statement with dates and amounts.'});return;}
   const first=S.demo||!S.statements.length;
   if(S.demo){S.demo=false;S.txns=[];S.statements=[];}
   const key=t=>t.date+'|'+t.amt.toFixed(2)+'|'+merchantKey(t.desc);
-  const have={};S.txns.forEach(t=>{const k=key(t);have[k]=(have[k]||0)+1;});
+  const have={};S.txns.forEach(t=>{const k=key(t)+'|'+(t.cur||'NGN');have[k]=(have[k]||0)+1;});
   const sid='s'+Date.now().toString(36);let dups=0;const added=[];
-  for(const t of txns){const k=key(t);if(have[k]){have[k]--;dups++;continue;}added.push(enrich(t,sid));}
+  for(const t of txns){const k=key(t)+'|'+scur;if(have[k]){have[k]--;dups++;continue;}const e=enrich(t,sid);e.cur=scur;added.push(e);}
   if(!added.length){setU({error:`All ${dups} transactions in this file are already on this device.`});return;}
   const ds=added.map(t=>t.date).sort();
   S.txns.push(...added);
-  S.statements.push({id:sid,name,kind,count:added.length,from:ds[0],to:ds[ds.length-1],added:todayISO()});
+  S.statements.push({id:sid,name,kind,count:added.length,from:ds[0],to:ds[ds.length-1],added:todayISO(),cur:scur});
+  S.cur=scur;setCur(scur);
   countUpload();
-  setU({ok:`Added ${added.length} transactions, ${fmtD(ds[0])} to ${fmtDY(ds[ds.length-1])}.${dups?` Skipped ${dups} already here.`:''}`});
+  setU({ok:`Added ${added.length} transactions, ${fmtD(ds[0])} to ${fmtDY(ds[ds.length-1])}. Currency: ${curName(scur)} (${scur}). Wrong currency? Change it under On this device.${dups?` Skipped ${dups} already here.`:''}`});
   pasteOpen=false;pasteDraft='';
   addXP(first?100:40,first?'First statement':'Statement added');award('books');
   if(!isWide())tab='home';
@@ -1195,7 +1388,7 @@ function openTxns(filter){
    ${S.demo?'<p class="tiny">Sample data. Tags you set here reset when you upload your own statement.</p>':''}
    <div class="row"><label class="sr" for="txFilter">Filter</label><select id="txFilter" data-change="tx-filter" style="max-width:260px"><option value="all">All transactions (${T.length})</option><option value="untagged" ${filter==='untagged'?'selected':''}>Needs a tag</option>${cats.map(c=>`<option ${c===filter?'selected':''}>${esc(c)}</option>`).join('')}</select>
    <label class="row small" style="gap:6px"><input type="checkbox" id="txSimilar" checked style="width:18px;height:18px;accent-color:var(--green)"> Apply to similar</label></div>
-   <div>${shown.map(t=>`<div class="tx"><div><div class="d">${fmtDY(t.date)}</div><div class="ds">${esc(t.desc)}</div></div><select aria-label="Category for ${esc(t.desc)}" data-change="retag" data-arg="${t.id}">${opts(t)}</select><div class="amt ${t.amt>0?'in':''}">${t.amt>0?'+':''}${naira(t.amt)}</div></div>`).join('')||'<p class="muted small">Nothing here. Everything is tagged.</p>'}</div>
+   <div>${shown.map(t=>`<div class="tx"><div><div class="d">${fmtDY(t.date)}</div><div class="ds">${esc(t.desc)}</div></div><select aria-label="Category for ${esc(t.desc)}" data-change="retag" data-arg="${t.id}">${opts(t)}</select><div class="amt ${t.amt>0?'in':''}">${t.amt>0?'+':''}${money(t.amt)}</div></div>`).join('')||'<p class="muted small">Nothing here. Everything is tagged.</p>'}</div>
    ${rows.length>shown.length?`<button class="btn q" data-act="tx-more" data-arg="${esc(filter||'all')}">Show more (${rows.length-shown.length} left)</button>`:''}`,true);
   txFilter=filter;
 }
@@ -1215,18 +1408,20 @@ function retag(id,cat){
 function openManual(){
   const f=(id,l)=>`<label class="f" for="mn-${id}">${l}<input type="number" inputmode="numeric" min="0" id="mn-${id}" placeholder="0"></label>`;
   openSheet(`<div class="row" style="justify-content:space-between"><h2>Enter numbers by hand</h2><button class="btn q sm" data-act="close" aria-label="Close">${ic('x')}</button></div>
-   <p class="muted small">Rough monthly amounts in naira are fine. Timing insights need a real statement.</p>
-   <form class="stack" data-form="manual" style="gap:10px"><div class="grid2" style="gap:10px">${f('inc','Monthly income')}${f('rent','Rent & housing')}${f('food','Food & eating out')}${f('groc','Groceries')}${f('trans','Transport')}${f('bills','Bills, airtime & data')}${f('fun','Shopping & fun')}${f('bet','Betting')}${f('fam','Family & friends')}${f('loan','Loan repayments')}${f('save','Savings')}</div><button class="btn" type="submit">Build my money story</button></form>`);
+   <p class="muted small">Rough monthly amounts are fine. Timing insights need a real statement.</p>
+   <form class="stack" data-form="manual" style="gap:10px"><label class="f" for="mn-cur">Currency<select id="mn-cur">${curOptions(S.demo?(localeCurrency()||'NGN'):S.cur)}</select></label><div class="grid2" style="gap:10px">${f('inc','Monthly income')}${f('rent','Rent & housing')}${f('food','Food & eating out')}${f('groc','Groceries')}${f('trans','Transport')}${f('bills','Bills, airtime & data')}${f('fun','Shopping & fun')}${f('bet','Betting')}${f('fam','Family & friends')}${f('loan','Loan repayments')}${f('save','Savings')}</div><button class="btn" type="submit">Build my money story</button></form>`);
 }
 function submitManual(){
   const v=id=>Math.max(0,+($('#mn-'+id)?.value||0));
   const inc=v('inc');if(!inc){toast('Add your monthly income first.');return;}
   const d=todayISO().slice(0,8)+'01';
   const raw=[[inc,'Salary & income'],[-v('rent'),'Rent & housing'],[-v('food'),'Food & eating out'],[-v('groc'),'Groceries'],[-v('trans'),'Transport'],[-v('bills'),'Bills & power'],[-v('fun'),'Shopping'],[-v('bet'),'Betting'],[-v('fam'),'Family & friends'],[-v('loan'),'Loan repayments'],[-v('save'),'Savings & investing']].filter(([a])=>a);
+  const mcur=$('#mn-cur')?.value||'NGN';
   if(S.demo){S.demo=false;S.txns=[];S.statements=[];}
+  S.cur=mcur;setCur(mcur);
   S.txns=S.txns.filter(t=>t.src!=='manual');S.statements=S.statements.filter(s=>s.id!=='manual');
-  raw.forEach(([amt,cat])=>{const t=enrich({date:d,desc:cat+' (entered by hand)',amt},'manual');t.cat=cat;t.type=typeOf(cat,amt>0);t.tagged=true;S.txns.push(t);});
-  S.statements.push({id:'manual',name:'Entered by hand',kind:'manual',count:raw.length,from:d,to:d});
+  raw.forEach(([amt,cat])=>{const t=enrich({date:d,desc:cat+' (entered by hand)',amt},'manual');t.cat=cat;t.type=typeOf(cat,amt>0);t.tagged=true;t.cur=mcur;S.txns.push(t);});
+  S.statements.push({id:'manual',name:'Entered by hand',kind:'manual',count:raw.length,from:d,to:d,cur:mcur});
   closeSheet();addXP(40,'Numbers added');tab='home';onDataChanged({reveal:true});
 }
 function openQuiz(i=0,ans=[]){
@@ -1239,7 +1434,7 @@ function openQuiz(i=0,ans=[]){
   }
   const Q=QUIZ[i];quizAns=ans;
   openSheet(`<div class="row" style="justify-content:space-between"><span class="tiny">Question ${i+1} of ${QUIZ.length}</span><button class="btn q sm" data-act="close" aria-label="Close">${ic('x')}</button></div>
-   <div class="progress"><i style="width:${i/QUIZ.length*100}%"></i></div><h2>${esc(Q.q)}</h2>
+   <div class="progress"><i style="width:${i/QUIZ.length*100}%"></i></div><h2>${esc(lz(Q.q))}</h2>
    <div class="stack" style="gap:8px">${Q.o.map(([l],k)=>`<button class="opt" data-act="quiz-ans" data-arg="${i}:${k}">${esc(l)}</button>`).join('')}</div>`);
 }
 let quizAns=[];
@@ -1247,12 +1442,19 @@ function openLesson(id,answered){
   const L=LESSONS.find(l=>l.id===id);if(!L)return;
   const q=L.q;
   openSheet(`<div class="row" style="justify-content:space-between"><span class="chip info">${ic('book')}${L.min}-minute lesson</span><button class="btn q sm" data-act="close" aria-label="Close">${ic('x')}</button></div>
-   <article class="lesson"><h2>${esc(L.title)}</h2>${L.body.map(p=>`<p>${esc(p)}</p>`).join('')}</article>
+   <article class="lesson"><h2>${esc(L.title)}</h2>${L.body.map(p=>`<p>${esc(lz(p))}</p>`).join('')}</article>
    <div class="stack" style="gap:8px"><h3>${esc(q.q)}</h3>${q.o.map((o,k)=>`<button class="opt ${answered!=null?(k===q.a?'right':k===answered?'wrong':''):''}" data-act="lesson-ans" data-arg="${id}:${k}" ${answered!=null?'disabled':''}>${esc(o)}</button>`).join('')}
    ${answered!=null?`<p class="small ${answered===q.a?'':'muted'}"><b>${answered===q.a?'Correct.':'Not quite.'}</b> ${esc(q.why)}</p>${answered===q.a?'<button class="btn" data-act="close">Done</button>':`<button class="btn q" data-act="lesson" data-arg="${id}">Try again</button>`}`:''}</div>`);
 }
+function doExportCsv(){
+  const q=v=>{v=String(v==null?'':v);if(/^[=+\-@\t\r]/.test(v))v="'"+v;return '"'+v.replace(/"/g,'""')+'"';};
+  const rows=S.demo?[]:S.txns;
+  const csv=['date,description,amount,currency,category'].concat(rows.map(t=>[t.date||t.d,q(t.desc||t.name||t.n||''),t.amt!=null?t.amt:t.a,t.cur||'NGN',q(t.cat||t.c||'')].join(','))).join('\n');
+  if(!rows.length){toast('No transactions to export yet.');return;}
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));a.download='ledger-transactions.csv';document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},1000);toast('Saved ledger-transactions.csv');
+}
 async function doExport(){
-  const data={exportedAt:new Date().toISOString(),note:'Everything Ledger holds about you on this device.',consent:S.consent,quiz:S.quiz,statements:S.statements,transactions:S.demo?[]:S.txns.map(({id,src,mk,...t})=>t),xp:S.xp,badges:S.badges,checkins:S.checkins,challenges:S.challenges,lessons:S.lessons,plan:{code:P.id||null,freeUploadsUsed:P.used||0,subscription:P.sub||null}};
+  const data={exportedAt:new Date().toISOString(),note:'Everything Ledger holds about you on this device.',consent:S.consent,quiz:S.quiz,statements:S.statements,transactions:S.demo?[]:S.txns.map(({id,src,mk,...t})=>t),xp:S.xp,badges:S.badges,checkins:S.checkins,challenges:S.challenges,lessons:S.lessons,plan:{code:P.id||null,uploadsUsed:P.used||0,trialStart:P.trialStart?new Date(P.trialStart).toISOString():null,subscription:P.sub||null}};
   const json=JSON.stringify(data,null,2);
   if(!IN_VIEWER){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([json],{type:'application/json'}));a.download='ledger-my-data.json';document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},1000);toast('Saved ledger-my-data.json');return;}
   try{const dl=await window.claude.use('downloads');if(!dl){toast('Downloads are not available in this view.');return;}await dl.save({filename:'ledger-my-data.json',data:json});toast('Saved ledger-my-data.json');}
@@ -1270,8 +1472,11 @@ const ACT={
   'pw-cancel':()=>{pendingFile=null;setU({});},
   'clear-demo':()=>{S.demo=false;save();dataVer++;render();},
   'load-demo':()=>{if(S.txns.length){toast('Your own data is loaded. Remove it first to view the sample.');return;}S.demo=true;revealNext=true;save();dataVer++;render();},
-  'rm-stmt':id=>{S.txns=S.txns.filter(t=>t.src!==id);S.statements=S.statements.filter(s=>s.id!==id);toast('Statement removed from this device');U={};onDataChanged();},
+  'rm-stmt':id=>{S.txns=S.txns.filter(t=>t.src!==id);S.statements=S.statements.filter(s=>s.id!==id);if(S.txns.length&&!S.txns.some(t=>(t.cur||'NGN')===S.cur))S.cur=S.txns[0].cur||'NGN';toast('Statement removed from this device');U={};onDataChanged();},
   txns:f=>{txLimit=120;openTxns(f||'all');},
+  'export-csv':()=>doExportCsv(),
+  'set-lang':c=>{if(!I18N[c]&&c!=='en')return;S.lang=c;document.documentElement.lang=c;save();render();},
+  'set-cur':c=>{if(!CUR_MAP[c])return;S.cur=c;setCur(c);dataVer++;save();render();},
   'tx-more':f=>{txLimit+=200;openTxns(f);},
   close:()=>closeSheet(),
   scrim:(a,el,e)=>{if(e.target===el)closeSheet();},
@@ -1299,6 +1504,7 @@ const CHANGE={
   'ch-item':(a,el)=>{const [id,i]=a.split(':');const c=S.challenges.active.find(x=>x.id===id);if(!c)return;c.done[i]=el.checked;if(el.checked)addXP(5,'Step done');checkChallengeDone(c);save();render();},
   retag:(id,el)=>retag(id,el.value),
   'tx-filter':(a,el)=>{txLimit=120;openTxns(el.value);},
+  'stmt-cur':(a,el)=>{const c=el.value;if(!CUR_MAP[c])return;const st=S.statements.find(x=>x.id===a);if(!st)return;st.cur=c;S.txns.forEach(t=>{if(t.src===a)t.cur=c;});S.cur=c;setCur(c);toast('Currency set to '+curName(c));onDataChanged();},
   'tg-store':(a,el)=>{if(!el.checked&&!S.demo&&S.txns.length){el.checked=true;$('#wipeBox').innerHTML=`<div class="status err" style="margin-top:12px"><p class="small"><b>Stop remembering your data?</b> Your transactions stay until you close this page, then they're gone from this device.</p><div class="row" style="margin-top:10px"><button class="btn danger sm" data-act="forget">Stop remembering</button><button class="btn q sm" data-act="wipe-no">Cancel</button></div></div>`;return;}S.consent.store=el.checked;save();},
   'tg-ai':(a,el)=>{S.consent.ai=el.checked;if(!el.checked){chat=[];}save();}
 };

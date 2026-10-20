@@ -1,0 +1,50 @@
+// Tests for the Whop card-payment webhook (netlify/functions/whop.mjs). Run: node tests/test_whop.mjs
+import crypto from 'node:crypto';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const mem = new Map();
+globalThis.__LEDGER_STORES__ = { getSub: async id => mem.has(id) ? JSON.parse(mem.get(id)) : null, putSub: async r => { mem.set(r.id, JSON.stringify(r)); }, listSubIds: async () => [...mem.keys()], putProof: async () => {}, getProof: async () => null };
+const outbox = []; globalThis.__LEDGER_MAIL__ = async m => { outbox.push(m); };
+process.env.MAIL_USER = 'ledger@example.com'; process.env.MAIL_PASS = 'x';
+const { default: hook, verifySignature, WHOP_PLAN_ID } = await import(path.join(root, 'netlify/functions/whop.mjs'));
+const results = []; const t = (n, ok, d = '') => { results.push(!!ok); console.log((ok ? 'PASS ' : 'FAIL ') + n + (ok ? '' : ' ' + d)); };
+const SECRET = 'ws_' + crypto.randomBytes(24).toString('hex');
+const sign = (body, { id = 'msg_1', ts = Math.floor(Date.now() / 1000), secret = SECRET, b64 = false } = {}) => {
+  const key = b64 ? Buffer.from(secret.replace(/^ws_/, ''), 'base64') : Buffer.from(secret);
+  return { 'webhook-id': id, 'webhook-timestamp': String(ts), 'webhook-signature': 'v1,' + crypto.createHmac('sha256', key).update(`${id}.${ts}.${body}`).digest('base64') };
+};
+const send = async (ev, opts = {}, headersOverride) => {
+  const body = JSON.stringify(ev);
+  const r = await hook(new Request('https://ledger.example/api/whop', { method: 'POST', headers: headersOverride || sign(body, opts), body }));
+  return { status: r.status, body: await r.json() };
+};
+const payment = (over = {}) => ({ id: 'evt_1', type: 'payment.succeeded', data: { id: 'pay_AAA', status: 'paid', currency: 'usd', total: 9, plan: { id: WHOP_PLAN_ID }, user: { id: 'user_1', email: 'Ada@Example.com' }, ...over } });
+mem.set('LDG-ABCDEF', JSON.stringify({ id: 'LDG-ABCDEF', name: 'Ada Obi', phone: '2348031234567', email: 'ada@example.com', end: null, cancelAtEnd: false, periods: [], proofs: [], tokens: [] }));
+
+process.env.WHOP_WEBHOOK_SECRET = '';
+t('without a secret the endpoint says card payments are not connected', (await send(payment())).status === 503);
+process.env.WHOP_WEBHOOK_SECRET = SECRET;
+t('wrong signature is rejected', (await send(payment(), {}, { ...sign('{}'), 'webhook-id': 'x' })).status === 401);
+t('old timestamp is rejected', (await send(payment(), { ts: Math.floor(Date.now() / 1000) - 3600 })).status === 401);
+t('missing headers are rejected', (await send(payment(), {}, {})).status === 401);
+t('a different secret is rejected', (await send(payment(), { secret: 'ws_' + 'a'.repeat(48) })).status === 401);
+t('other event types are ignored', (await send({ id: 'e', type: 'membership.activated', data: {} })).body.ignored === 'membership.activated');
+t('payments for another plan are ignored', (await send(payment({ plan: { id: 'plan_OTHER' } }))).body.ignored === 'other plan');
+t('unpaid payments are ignored', (await send(payment({ status: 'open' }))).body.ignored === 'not paid');
+t('a payment with an unknown email gets 404 so Whop retries', (await send(payment({ user: { id: 'u', email: 'nobody@example.com' } }))).status === 404);
+t('a payment without an email is refused', (await send(payment({ user: { id: 'u', email: null } }))).status === 422);
+let r = await send(payment());
+const rec = JSON.parse(mem.get('LDG-ABCDEF'));
+t('a paid, matching payment activates Ledger Plus for a month (email match ignores case)', r.status === 200 && r.body.activated === 'LDG-ABCDEF' && Date.parse(rec.end) > Date.now() + 27 * 864e5, JSON.stringify(r));
+t('the payment is recorded as an approved card payment', rec.proofs[0].key === 'whop:pay_AAA' && rec.proofs[0].state === 'approved' && rec.proofs[0].type === 'whop');
+t('an approval email is sent', outbox.some(m => m.to === 'ada@example.com'));
+const end1 = rec.end;
+r = await send(payment());
+t('the same payment delivered twice does not add a second month', r.body.duplicate === true && JSON.parse(mem.get('LDG-ABCDEF')).end === end1);
+r = await send(payment({ id: 'pay_BBB' }));
+const rec2 = JSON.parse(mem.get('LDG-ABCDEF'));
+t('the next monthly payment extends from the old end date', Date.parse(rec2.end) > Date.parse(end1) + 27 * 864e5);
+t('signature check accepts a base64-decoded key too', await (async () => { const body = JSON.stringify(payment({ id: 'pay_CCC' })); const s = sign(body, { b64: true, id: 'msg_b' }); const h = new Headers(s); return verifySignature(SECRET, h, body); })());
+t('GET is refused', (await hook(new Request('https://ledger.example/api/whop'))).status === 405);
+const pass = results.filter(Boolean).length; console.log(`${pass}/${results.length} passed`); process.exit(pass === results.length ? 0 : 1);

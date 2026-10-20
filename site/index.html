@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en-NG">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
@@ -13,7 +13,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta property="og:title" content="Ledger · money habits coach">
 <meta property="og:description" content="Upload a bank statement you already have and see where your money goes. Ledger reads it on your phone, finds your habits and coaches you to better ones.">
-<meta property="og:image" content="icons/icon-512.png">
+<meta property="og:image" content="icons/og.png">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icons/favicon-32.png" sizes="32x32">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
@@ -23,6 +23,7 @@
 <link rel="stylesheet" href="app.css">
 </head>
 <body>
+<a class="skip" href="#view">Skip to content</a>
 <div class="app" id="app">
   <aside class="side" id="side" aria-label="Statements"></aside>
   <div class="main">
@@ -35,7 +36,7 @@
 <div id="sheetRoot"></div>
 <div class="toasts" id="toasts" role="status" aria-live="polite"></div>
 <canvas id="fx" aria-hidden="true"></canvas>
-<input type="file" id="fileIn" accept=".pdf,.csv,.txt,.xlsx,.xls" hidden>
+<input type="file" id="fileIn" accept=".pdf,.csv,.txt,.xlsx,.xls,.ofx,.qfx,.qif,.xml,.sta,.mt940,.940" hidden>
 <noscript><p style="padding:16px">Ledger needs JavaScript to read your statement on your device.</p></noscript>
 <script src="app.js"></script>
 </body>
