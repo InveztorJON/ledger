@@ -112,7 +112,8 @@ const trialStarted=()=>!!trialData().start;
 const trialOver=()=>trialStarted()&&(Date.now()>=trialEnd()||trialData().used>=PLAN.monthlyUploads);
 const trialDaysLeft=()=>trialStarted()?Math.max(0,Math.ceil((trialEnd()-Date.now())/864e5)):PLAN.trialDays;
 const freeLeft=()=>trialOver()?0:Math.max(1,trialDaysLeft());   // days of free trial left (7 before the first upload)
-const canUpload=()=>planActive()?!monthFull():!trialOver();
+const isOwner=()=>!IN_VIEWER&&signedIn()&&!!P.acct.owner;                    // Jonspire's own accounts: unlimited, never counted (the server decides)
+const canUpload=()=>isOwner()||(planActive()?!monthFull():!trialOver());
 const planDaysLeft=()=>P.sub&&P.sub.end?Math.max(0,Math.ceil((Date.parse(P.sub.end)-Date.now())/864e5)):0;
 const planExpired=()=>!!(P.sub&&P.sub.end&&!planActive());
 const renewDue=()=>planActive()&&planDaysLeft()<=PLAN.remindDays&&!P.sub.cancelAtEnd&&!P.sub.pending;
@@ -150,6 +151,7 @@ function gateUpload(then){
 // Counts one upload. Paid uploads are counted by our server's subscription record; free-trial uploads are counted by our server on the account.
 // The app keeps its own tally in step so the meter is right even offline.
 function countUpload(){
+  if(isOwner())return;
   if(planActive()){
     P.pendingUse=(P.pendingUse||0)+1;savePlan();
     if(!IN_VIEWER&&P.id&&P.token)flushUse().finally(()=>{usageNudge();render();});
@@ -228,7 +230,7 @@ async function acctApi(action,body){
 }
 function takeAcct(d){
   if(!d||!d.k)return;
-  P.acct={k:d.k,token:d.token||(P.acct&&P.acct.token)||'',email:d.email,trial:d.trial,subId:d.subId||null,planActive:!!d.planActive};
+  P.acct={k:d.k,token:d.token||(P.acct&&P.acct.token)||'',email:d.email,trial:d.trial,subId:d.subId||null,planActive:!!d.planActive,owner:!!d.owner};
   if(d.subToken&&d.subId){P.id=d.subId;P.token=d.subToken;}
   savePlan();
 }
@@ -397,6 +399,7 @@ function usageMeter(){
   return`<div class="usage"><div class="head"><p class="small"><b>${u} of ${L}</b> statement uploads used this month</p><span class="chip ${cls}">${monthFull()?'All used':monthLeft()+' left'}</span></div><div class="xp ${cls}" role="progressbar" aria-label="Uploads used this month" aria-valuemin="0" aria-valuemax="${L}" aria-valuenow="${u}"><i style="width:${u/L*100}%"></i></div></div>`;
 }
 function planLine(){
+  if(isOwner())return`<div class="planline good">${ic('check')}<span><b>Owner access</b> · unlimited statements</span></div>`;
   if(planActive())return`<div class="planline good">${ic('check')}<span><b>Ledger Plus</b> · ${monthUsed()} of ${monthLimit()} uploads used · until ${fmtLong(P.sub.end)}</span></div>`;
   if(P.sub&&P.sub.pending)return`<div class="planline">${ic('check')}<span>Payment received, being verified. <button class="btn link" data-act="plan">Details</button></span></div>`;
   const left=freeLeft();
@@ -404,7 +407,7 @@ function planLine(){
   return`<div class="planline warn">${ic('lock')}<span>Free trial ended. <button class="btn link" data-act="plan">Get Ledger Plus · ${priceTxt()}/month</button></span></div>`;
 }
 function planBanner(){
-  if(IN_VIEWER||!P.sub)return'';
+  if(IN_VIEWER||!P.sub||isOwner())return'';
   const s=P.sub;
   if(monthFull())return`<div class="banner" role="alert"><p><b>You've used all ${monthLimit()} uploads for this month.</b> Renew for ${priceTxt()} to keep uploading, or cancel. Your data stays here.</p><div class="row"><button class="btn sm" data-act="plan-renew">Renew</button><button class="btn q sm" data-act="plan-cancel-open">Cancel</button></div></div>`;
   if(monthWarn())return`<div class="banner" role="status"><p><b>${monthUsed()} of ${monthLimit()} uploads used.</b> You're past ${Math.round(PLAN.warnAt*100)}% for this month. Renew for ${priceTxt()} so you don't get cut off, or cancel if you don't need more.</p><div class="row"><button class="btn sm" data-act="plan-renew">Renew</button><button class="btn q sm" data-act="plan-cancel-open">Cancel</button></div></div>`;
@@ -419,6 +422,7 @@ function accountCard(){
   return`<section class="card" id="account"><div class="head"><div><h2>Create your free account</h2><p class="muted small">Needed to upload a statement. It takes a minute: email, a code, then a password. Your ${PLAN.trialDays}-day trial starts with your first statement.</p></div></div><div class="row" style="margin-top:10px"><button class="btn sm" data-act="auth-open-signup">Create account</button><button class="btn q sm" data-act="auth-open">Log in</button></div></section>`;
 }
 function planCard(){
+  if(isOwner())return`<section class="card" id="plan"><div class="head"><div><h2>Owner access</h2><p class="muted small">Unlimited statements and coach for ${esc(P.acct.email)}. No trial and no payment.</p></div><span class="chip good">${ic('check')}Unlimited</span></div></section>`;
   const s=P.sub||{};
   let body;
   if(planActive())body=`<div class="head"><div><h2>Ledger Plus</h2><p class="muted small">Active until ${fmtLong(s.end)} · ${planDaysLeft()} days left${s.cancelAtEnd?' · won\'t renew':''}</p></div><span class="chip good">${ic('check')}Active</span></div>${usageMeter()}`;

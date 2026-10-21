@@ -6,7 +6,7 @@
 //   forgot {email}                    -> emails a code to choose a new password
 //   reset  {email, code, password}    -> sets the new password and signs in
 //   status {k, token}                 -> the account view (trial and plan)
-//   use    {k, token}                 -> counts one statement upload against the free trial (starts it on the first one)
+//   use    {k, token}                 -> counts one statement upload against the free trial (starts it on the first one); owners are not counted
 //   logout {k, token}                 -> signs this device out
 //   delete {k, token, password}       -> deletes the account (email, password, sign-ins). Only the trial dates stay, so deleting can't be used to get a second trial.
 import { json, allowedOrigin, clientIp, glimit, readJson } from '../lib/http.mjs';
@@ -138,6 +138,7 @@ export default async (req, context) => {
     }
     if (action === 'use') {
       if (await A.planEnd(st, rec) > Date.now()) return json(200, await A.view(st, rec));   // a paid plan is counted by the subscription
+      if (await A.isOwner(rec)) return json(200, await A.view(st, rec));                    // owners are never counted
       const t = A.trialState(rec);
       if (t.over) return json(402, { error: 'Your free trial has ended.', ...(await A.view(st, rec)) });
       if (!rec.trialStart) rec.trialStart = Date.now();
