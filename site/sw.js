@@ -1,6 +1,6 @@
 // Ledger service worker: offline support. Version changes on every build so updates reach users.
-const VERSION = 'ledger-plus-10';
-const CORE = ["./", "index.html", "app.css", "app.js", "manifest.webmanifest", "privacy.html", "terms.html", "icons/icon-192.png", "icons/logo.png", "icons/favicon-32.png"];
+const VERSION = 'ledger-plus-11';
+const CORE = ["./", "index.html", "app.css", "app.js", "manifest.webmanifest", "privacy.html", "terms.html", "icons/icon-192.png?v=2", "icons/logo.png", "icons/favicon-32.png?v=2"];
 self.addEventListener('install', e => { e.waitUntil(caches.open(VERSION).then(c => c.addAll(CORE)).then(() => self.skipWaiting())); });
 self.addEventListener('activate', e => { e.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k => k !== VERSION && k !== 'ledger-runtime').map(k => caches.delete(k)))).then(() => self.clients.claim())); });
 self.addEventListener('fetch', e => {
