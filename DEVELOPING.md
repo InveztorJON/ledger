@@ -30,9 +30,11 @@ Ledger is a product of Jonspire Limited (RC 9187600), Lagos, Nigeria.
 - `netlify/lib/mail.mjs` and `emails.mjs` send Ledger Plus email through a Gmail account (receipt received, approved, rejected, 80% and 100% usage, admin alert on a new receipt). `netlify/functions/remind.mjs` runs every day at 08:00 Lagos time and emails each subscriber once when their month is 3 days from ending. Email turns on when `MAIL_USER` (the Gmail address) and `MAIL_PASS` (a Google app password) are set in Netlify environment variables; without them email is off and nothing else breaks. Optional: `ADMIN_EMAIL` (where new-receipt alerts go; defaults to `MAIL_USER`).
 - `netlify/functions/coach.mjs` is the AI coach server at `/api/coach`. The education-only rules live here, along with rate limits and the origin check. It never logs content.
 - `netlify.toml` sets the publish folder, the functions folder and the security headers (CSP).
+- `netlify/functions/telegram.mjs` is the Telegram control bot at `/api/telegram`; `netlify/lib/telegram.mjs` holds its Telegram and GitHub helpers. `.github/workflows/telegram.yml` does the work Claude does for it, with instructions in `.github/telegram/`, and `tools/telegram_report.mjs` sends the result back. See "Telegram control bot" below.
 - `tests/` holds the test tools:
   - `node tests/test_coach.mjs netlify/functions/coach.mjs` runs the coach unit tests (18). The Anthropic API is mocked.
   - `node tests/test_subs.mjs` runs the Ledger Plus server tests (66, including email) with in-memory storage.
+  - `node tests/test_telegram.mjs` runs the Telegram bot tests (48) with Telegram and GitHub mocked.
   - `python tests/plus_test.py http://127.0.0.1:8899` runs the full free-trial → pay → verify → reminder → restore flow in a browser (51). Start `tests/serve.mjs` first; its admin password is `test-admin-key-123`.
   - `python tests/xlsx_test.py http://127.0.0.1:8899` checks that an Excel (.xlsx) statement is read, using the Excel reader hosted in `site/vendor/` (5 checks).
   - `node tests/serve.mjs site 8899` runs a local copy with a mocked coach.
@@ -55,6 +57,30 @@ Limits to know: the free-trial count lives on the phone (in local storage and a 
 
 Open a new chat and attach this folder, or give it the GitHub repo `InveztorJON/ledger`. Say what you want changed. Claude can edit, test, and push to GitHub, and Netlify then deploys the change.
 
+## Telegram control bot
+
+Change the website and draft social posts from Telegram, without a computer.
+
+- **Send any message** (for example *"Make the Ledger Plus button say Start free"*). Claude makes the change on GitHub, runs the tests and sends you a preview link in 1–5 minutes. Send more messages and they are added to the same change.
+- **Tap ✅ Publish** to put it live (about a minute later), or **🗑 Discard**. Nothing goes live without your tap, and a change with failing tests cannot be published.
+- **/post** *your idea* drafts posts for X, LinkedIn, TikTok and YouTube. X and LinkedIn get a button that opens the app with the post filled in; TikTok and YouTube get a script plus a caption and title to paste when you upload the video. Posting is always done by you, from the Jonspire accounts on your phone.
+- **/status**, **/publish**, **/discard**, **/help**.
+- Only Telegram IDs in `TELEGRAM_ALLOWED_IDS` can use it. Anyone else is told it is private. Message text is never logged.
+- Save Netlify credits: send several changes, then publish once. Each publish is one production deploy.
+
+### Setting it up (once, about 20 minutes, works from a phone browser)
+
+1. **Bot:** in Telegram, message **@BotFather**, send `/newbot`, pick a name, and copy the token. Then message **@userinfobot** and copy your numeric ID.
+2. **Claude for GitHub:** you need `CLAUDE_CODE_OAUTH_TOKEN`, which uses your Claude Pro/Max plan at no extra cost. Create it once by running `claude setup-token` in a terminal where Claude Code is installed (this one step needs a computer, about 2 minutes). Alternatively, create `ANTHROPIC_API_KEY` at console.anthropic.com instead, which is billed per use.
+3. **GitHub** (github.com/InveztorJON/ledger; on a phone use "Desktop site"):
+   - Settings → Secrets and variables → Actions → New repository secret: `TELEGRAM_BOT_TOKEN`, and `CLAUDE_CODE_OAUTH_TOKEN` (or `ANTHROPIC_API_KEY`).
+   - Settings → Actions → General → Workflow permissions → tick **Allow GitHub Actions to create and approve pull requests** → Save.
+   - Your profile → Settings → Developer settings → Personal access tokens → **Fine-grained tokens** → Generate: Repository access *Only select repositories* → `InveztorJON/ledger`; Permissions → Repository → **Contents: Read and write**, **Pull requests: Read and write**. Copy it.
+4. **Netlify** (Project configuration → Environment variables): add `TELEGRAM_BOT_TOKEN`, `TELEGRAM_ALLOWED_IDS` (your ID from step 1) and `LEDGER_GITHUB_TOKEN` (the GitHub token from step 3). Then Deploys → Trigger deploy (or merge a change, which deploys anyway).
+5. Open the admin page, sign in and tap **Connect Telegram bot**. Then send your bot `/help`.
+
+If a request fails, the bot sends a link to the GitHub run. If GitHub tokens expire, make a new one and update `LEDGER_GITHUB_TOKEN`.
+
 ## Still to do before a wide launch
 
 1. Test real statements from at least 5 banks (GTBank, Access, Zenith, UBA, First Bank, OPay, Kuda, Moniepoint).
@@ -65,6 +91,7 @@ Open a new chat and attach this folder, or give it the GitHub repo `InveztorJON/
 
 ## Change log
 
+- 19 Oct 2026: Telegram control bot. Change the site and draft social posts (X, LinkedIn, TikTok, YouTube) from Telegram; every change is previewed and published only on your tap. Admin page has a "Connect Telegram bot" button.
 - 19 Oct 2026: Global release. Ledger now reads statements from the US, Europe and African countries: other date orders (month-first or day-first, picked from the dates), comma or dot decimals, thousands spaces, signed or Debit/Credit columns, multi-language headers (English, French, Spanish, German, Portuguese, Italian, Dutch), card statements with positive purchases, plus OFX/QFX, QIF, MT940 and CAMT.053 files. The currency is detected per statement (symbols, ISO codes, IBAN country, bank names, your locale) and can be changed per statement; Ledger never converts between currencies and analyses one currency at a time. Thresholds scale with the currency; the coach is told the currency. The plan changed to ₦9,000/month with a 7-day free trial (from the first upload) instead of 2 free uploads. Overseas payment: Whop checkout link in the plan sheet; the payer uploads the Whop receipt and you approve after confirming the payment in Whop (no Whop API key or webhook is set up yet).
 - 14 Oct 2026: Price cut. Ledger Plus is now ₦6,000/month (was ₦10,000). Same plan otherwise: 2 free uploads, 20 uploads per paid month, warning at 16. Existing subscribers keep their current paid month; renewals are ₦6,000.
 - 7 Oct 2026 (email): Email for Ledger Plus via Gmail (receipts, approval, rejection, 80% and 100% usage, daily 3-day renewal reminder, admin alert). Email now required to subscribe. Privacy and terms updated.

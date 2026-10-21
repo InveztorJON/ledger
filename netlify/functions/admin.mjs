@@ -5,12 +5,14 @@
 //   POST check   {id, key}          -> AI reads the receipt and compares it with what we expect
 //   POST approve {id, key}          -> payment confirmed: one month starts now (or from the current end date)
 //   POST reject  {id, key, reason}  -> payment not found; the user sees the reason and can upload again
+//   POST telegram-setup {}          -> connects the Telegram control bot to this site (see netlify/functions/telegram.mjs)
 
 import { json, clientIp, glimit, gblocked, readJson } from '../lib/http.mjs';
 import { PLAN, safeEqual, validId, publicView, applyApproval, applyRejection, judgeReceipt } from '../lib/plan.mjs';
 import { stores } from '../lib/store.mjs';
 import { sendMail } from '../lib/mail.mjs';
 import * as mail from '../lib/emails.mjs';
+import { connectWebhook } from '../lib/telegram.mjs';
 
 const READ_PROMPT = `This file was uploaded as proof of a bank transfer. Read it carefully and reply with one JSON object only, no other text:
 {"is_receipt": true/false (is this a bank transfer receipt or confirmation screen?),
@@ -93,6 +95,10 @@ export default async (req, context) => {
     if (req.method !== 'POST') return json(405, { error: 'Use POST' });
     const { body, error } = await readJson(req, 4000);
     if (error) return error;
+    if (action === 'telegram-setup') {
+      const out = await connectWebhook(process.env.URL || url.origin);
+      return json(out.ok ? 200 : 400, out);
+    }
     if (!validId(body.id)) return json(400, { error: 'Bad id' });
     const rec = await st.getSub(body.id);
     if (!rec) return json(404, { error: 'Subscription not found' });
