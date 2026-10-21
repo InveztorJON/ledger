@@ -64,6 +64,18 @@ export async function planEnd(st, rec) {
   const s = await st.getSub(rec.subId);
   return s && s.end ? Date.parse(s.end) : 0;
 }
+// Owners (Jonspire Limited) use Ledger without limits: no trial count and no payment. The built-in owners are kept as
+// fingerprints of their email so the addresses are not published in this repository. OWNER_EMAILS in Netlify (comma
+// separated) adds more. Only a verified account counts, so the owner's inbox has to confirm the 6-digit code first.
+const OWNER_PRINTS = new Set([
+  '1f5f771afeb2cec2f9fb64e03aa86a67a94c315660f05029387856b67904a6e5',
+  '9051efa06bcd1859ac958345076100041127be84c5946ede29127efb7f3616cc'
+]);
+export async function isOwner(rec) {
+  if (!rec || !rec.verified || !rec.canon) return false;
+  const extra = String(process.env.OWNER_EMAILS || '').split(',').map(canonEmail).filter(Boolean);
+  return extra.includes(rec.canon) || OWNER_PRINTS.has(await sha256('ledger-owner|' + rec.canon));
+}
 export function trialState(rec, now = Date.now()) {
   const start = rec.trialStart || 0, used = rec.trialUsed || 0;
   const end = start ? start + TRIAL.days * DAY : 0;
@@ -71,10 +83,11 @@ export function trialState(rec, now = Date.now()) {
   return { started: !!start, start, end, used, limit: TRIAL.uploads, over, daysLeft: start ? Math.max(0, Math.ceil((end - now) / DAY)) : TRIAL.days };
 }
 export async function view(st, rec, now = Date.now()) {
-  return { k: rec.key, email: rec.email, trial: trialState(rec, now), subId: rec.subId || null, planActive: (await planEnd(st, rec)) > now };
+  return { k: rec.key, email: rec.email, trial: trialState(rec, now), subId: rec.subId || null, planActive: (await planEnd(st, rec)) > now, owner: await isOwner(rec) };
 }
 // May this account use the paid-for coach right now?
 export async function mayCoach(st, rec, now = Date.now()) {
+  if (await isOwner(rec)) return true;
   if ((await planEnd(st, rec)) > now) return true;
   const t = trialState(rec, now);
   return t.started && !t.over;

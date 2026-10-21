@@ -88,4 +88,23 @@ r = await call('login', { email: E, password: 'another long pass 7' }, '77.7.7.7
 // shared limits: sign-ups from one network, counted across "servers"
 let blocked = 0; for (let i = 0; i < 9; i++) { const x = await call('signup', { email: `bulk${i}@example.com`, password: PW, agree: true }, '88.8.8.8'); if (x.s === 429) blocked++; }
 t('too many sign-ups from one network are stopped (shared counter)', blocked >= 3, blocked);
+// owners (Jonspire Limited): unlimited, never counted, coach always allowed
+{ const L = await import(path.join(root, 'netlify/lib/acct.mjs'));
+  await call('signup', { email: 'Ndubu.JohnPaul+ledger@gmail.com', password: PW, agree: true });
+  let o = await call('verify', { email: 'Ndubu.JohnPaul+ledger@gmail.com', code: lastCode() });
+  t('an owner email is recognised after the code (dots, case and +tags ignored)', o.s === 200 && o.b.owner === true, JSON.stringify(o.b));
+  const om = { k: o.b.k, token: o.b.token };
+  let ok = true; for (let i = 0; i < 25; i++) { const u = await call('use', om); if (u.s !== 200) ok = false; }
+  o = await call('status', om); t('an owner can upload 25 statements and the trial never starts', ok && o.b.trial.started === false && o.b.trial.used === 0 && o.b.owner === true, JSON.stringify(o.b));
+  const orec = JSON.parse(A.get(om.k)); orec.trialStart = Date.now() - 30 * 864e5; orec.trialUsed = 99; A.set(om.k, JSON.stringify(orec));
+  t('an owner with an old, used-up trial still uploads and may use the coach', (await call('use', om)).s === 200 && await L.mayCoach(globalThis.__LEDGER_STORES__, JSON.parse(A.get(om.k))));
+  await call('signup', { email: 'jonspirelimited@gmail.com', password: PW, agree: true });
+  o = await call('verify', { email: 'jonspirelimited@gmail.com', code: lastCode() }); t('the company email is an owner too', o.b.owner === true);
+  t('an owner email that has not confirmed its code is not an owner', !(await L.isOwner({ canon: 'ndubujohnpaul@gmail.com', verified: false })));
+  r = await call('login', { email: 'legacy.user@example.com', password: PW }); t('ordinary accounts are not owners', r.s === 200 && r.b.owner === false, JSON.stringify(r.b));
+  t('ordinary accounts with a used-up trial may not use the coach', !(await L.mayCoach(globalThis.__LEDGER_STORES__, { ...JSON.parse(A.get(me.k)), trialStart: 1, trialUsed: 99 })));
+  process.env.OWNER_EMAILS = 'Partner@Example.com, junk';
+  t('OWNER_EMAILS in Netlify adds more owners', await L.isOwner({ canon: 'partner@example.com', verified: true }) && !(await L.isOwner({ canon: 'other@example.com', verified: true })));
+  delete process.env.OWNER_EMAILS;
+}
 console.log(fails ? fails + ' failed' : 'all passed'); process.exit(fails ? 1 : 0);
