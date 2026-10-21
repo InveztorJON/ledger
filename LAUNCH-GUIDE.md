@@ -58,6 +58,8 @@ Optional settings (same place):
 | `COACH_DAILY_LIMIT` | 2000 | Safety cap on questions per day (per server instance) |
 | `COACH_MODEL` | `claude-haiku-4-5-20251001` | The Claude model used. Haiku is fast and low cost. |
 
+**Email is required for sign-up.** Also add `MAIL_USER` (your Gmail address) and `MAIL_PASS` (a Gmail app password). Without them nobody can create an account, because the confirmation code can't be sent.
+
 **Never** put the API key in any file in this folder or on GitHub. It only goes in Netlify's environment variables.
 
 ## Step 5 — Check it on real phones (10 minutes)
