@@ -81,6 +81,8 @@ Change the website and draft social posts from Telegram, without a computer.
 
 If a request fails, the bot sends a link to the GitHub run. If GitHub tokens expire, make a new one and update `LEDGER_GITHUB_TOKEN`.
 
+**Netlify settings only take effect on the next deploy.** If "Connect Telegram bot" says a setting is missing even though it is in Netlify, the setting was saved after the last deploy: Deploys → Trigger deploy → Deploy site, wait for Published, then tap Connect again. When it is fully set up, the message is just "Telegram bot @… is connected." with no extra lines.
+
 ## Still to do before a wide launch
 
 1. Test real statements from at least 5 banks (GTBank, Access, Zenith, UBA, First Bank, OPay, Kuda, Moniepoint).
